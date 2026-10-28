@@ -375,19 +375,61 @@ class TCH_Raffle_Admin {
     }
 
     /**
-     * Render Phase 2 Placeholder
+     * Render Phase 2 Live Stage Launcher & Test Reset Controls
      */
     public function render_stage_placeholder() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
+
+        // Handle Reset Statuses Action
+        if ( isset( $_POST['tch_reset_draw_statuses'] ) && check_admin_referer( 'tch_reset_draw_nonce' ) ) {
+            $wpdb->query( "UPDATE $table_name SET status = 'valid'" );
+            echo '<div class="notice notice-success is-dismissible"><p><strong>All entries have been reset to Eligible (valid) status!</strong> You are ready for a fresh draw.</p></div>';
+        }
+
+        $valid_count  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table_name WHERE status = 'valid'" );
+        $winner_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table_name WHERE status = 'winner'" );
+        $dq_count     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table_name WHERE status = 'disqualified'" );
+        $stage_url    = home_url( '/?tch_live_stage=1' );
         ?>
         <div class="wrap">
-            <h1>Live Draw Stage (Phase 2)</h1>
-            <div style="background:#fff;padding:30px;border:1px solid #ccd0d4;border-radius:6px;margin-top:20px;max-width:650px;">
-                <h2 style="margin-top:0;">Ready for Phase 2 Integration</h2>
-                <p>Once Phase 1 (Landing Page, Countdown Timer & Registration Ticket System) is deployed and tested, we will activate the full-screen animated Live Draw Stage right here.</p>
+            <h1 style="display:flex;align-items:center;gap:10px;">
+                <span class="dashicons dashicons-megaphone" style="font-size:28px;width:28px;height:28px;"></span>
+                TCH Raffle — Live Draw Stage Control Center
+            </h1>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;margin-top:20px;max-width:980px;">
+                
+                <!-- Launch Card -->
+                <div style="background:#0f172a;color:#fff;padding:28px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+                    <span style="background:rgba(250,204,21,0.2);color:#facc15;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;">BROADCAST MODE</span>
+                    <h2 style="color:#fff;font-size:24px;margin:12px 0 10px;">Launch Full-Screen Stage</h2>
+                    <p style="color:#94a3b8;line-height:1.5;margin-bottom:24px;">
+                        Opens the standalone, distraction-free animation stage with synthesized drumroll sound effects, live verification controls, and confetti finale.
+                    </p>
+                    <a href="<?php echo esc_url( $stage_url ); ?>" target="_blank" class="button button-primary button-hero" style="background:#facc15;border-color:#eab308;color:#0f172a;font-weight:800;width:100%;text-align:center;">
+                        🚀 Open Live Draw Stage in New Tab ↗
+                    </a>
+                </div>
+
+                <!-- Pool Status & Reset Card -->
+                <div style="background:#fff;padding:28px;border:1px solid #ccd0d4;border-radius:12px;">
+                    <h2 style="margin-top:0;">Current Draw Pool Status</h2>
+                    <ul style="font-size:15px;line-height:2;margin:16px 0 24px;">
+                        <li>🟢 <strong>Eligible Tickets in Pool:</strong> <?php echo esc_html( $valid_count ); ?></li>
+                        <li>🏆 <strong>Confirmed Winners:</strong> <?php echo esc_html( $winner_count ); ?></li>
+                        <li>❌ <strong>Disqualified Tickets:</strong> <?php echo esc_html( $dq_count ); ?></li>
+                    </ul>
+
+                    <form method="post" onsubmit="return confirm('Reset all Winners and Disqualified entries back to Eligible? Use this after practice runs before the real draw.');">
+                        <?php wp_nonce_field( 'tch_reset_draw_nonce' ); ?>
+                        <button type="submit" name="tch_reset_draw_statuses" class="button button-secondary">
+                            🔄 Reset All Tickets to Eligible (Practice Reset)
+                        </button>
+                    </form>
+                </div>
+
             </div>
         </div>
         <?php
     }
-}
-
-new TCH_Raffle_Admin();
