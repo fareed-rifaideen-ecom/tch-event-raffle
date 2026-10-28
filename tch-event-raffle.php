@@ -99,10 +99,14 @@ function tch_raffle_get_settings() {
 }
 
 /**
- * 3. Load Admin and Public Classes
+ * 3. Load Admin, Public, and Live Stage Classes
  */
 require_once TCH_RAFFLE_PATH . 'includes/class-tch-raffle-admin.php';
 
 if ( file_exists( TCH_RAFFLE_PATH . 'includes/class-tch-raffle-public.php' ) ) {
     require_once TCH_RAFFLE_PATH . 'includes/class-tch-raffle-public.php';
+}
+
+if ( file_exists( TCH_RAFFLE_PATH . 'includes/class-tch-raffle-stage.php' ) ) {
+    require_once TCH_RAFFLE_PATH . 'includes/class-tch-raffle-stage.php';
 }
