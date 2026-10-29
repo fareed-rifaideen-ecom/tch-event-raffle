@@ -1,5 +1,5 @@
 /**
- * TCH Event Raffle v2.0 — 5-Engine Broadcast Controller & Real-Time Spectator Sync
+ * TCH Event Raffle v2.1 — 5-Engine Broadcast Controller (No Auto-Spin on Load + Broadcast End Lock)
  */
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof window.tchStageConfig === 'undefined') return;
@@ -10,50 +10,58 @@ document.addEventListener('DOMContentLoaded', function () {
     let activeEngine     = cfg.defaultEngine || 'slot';
     let poolList         = [];
     let currentCandidate = null;
-    let lastSeenSpinId   = 0;
-    let lastSeenStatus   = 'idle';
+
+    // Initialize with server's current spin_id so opening the page NEVER triggers a stale auto-spin
+    let lastSeenSpinId   = Number(cfg.initialSpinId || 0);
+    let lastSeenStatus   = cfg.initialStatus || 'idle';
     let isAnimating      = false;
+    let broadcastEnded   = (lastSeenStatus === 'winner_confirmed');
     let audioCtx         = null;
 
     // DOM Elements
-    const statValid       = document.getElementById('tch-stat-valid');
-    const machineCard     = document.getElementById('tch-machine-card');
-    const machineStatus   = document.getElementById('tch-machine-status');
-    const engineSelect    = document.getElementById('tch-engine-select');
-    const operatorToolbar = document.getElementById('tch-operator-toolbar');
-    const btnPinLogin     = document.getElementById('tch-btn-pin-login');
-    const pinModal        = document.getElementById('tch-pin-modal');
-    const pinInput        = document.getElementById('tch-pin-input');
-    const pinSubmit       = document.getElementById('tch-pin-submit');
-    const pinCancel       = document.getElementById('tch-pin-cancel');
+    const statValid            = document.getElementById('tch-stat-valid');
+    const machineCard          = document.getElementById('tch-machine-card');
+    const machineStatus        = document.getElementById('tch-machine-status');
+    const engineSelect         = document.getElementById('tch-engine-select');
+    const operatorToolbar      = document.getElementById('tch-operator-toolbar');
+    const btnPinLogin          = document.getElementById('tch-btn-pin-login');
+    const pinModal             = document.getElementById('tch-pin-modal');
+    const pinInput             = document.getElementById('tch-pin-input');
+    const pinSubmit            = document.getElementById('tch-pin-submit');
+    const pinCancel            = document.getElementById('tch-pin-cancel');
 
-    const viewSlot        = document.getElementById('tch-engine-slot');
-    const viewDrum        = document.getElementById('tch-engine-drum');
-    const viewWheel       = document.getElementById('tch-engine-wheel');
-    const viewLotto       = document.getElementById('tch-engine-lotto');
+    const broadcastEndedView   = document.getElementById('tch-broadcast-ended-view');
+    const endedRef             = document.getElementById('tch-ended-ref');
+    const endedName            = document.getElementById('tch-ended-name');
+    const activeEnginesWrapper = document.getElementById('tch-active-engines-wrapper');
 
-    const slotCode        = document.getElementById('tch-slot-code');
-    const drumBarrel      = document.getElementById('tch-drum-barrel');
-    const wheelWrapper    = document.getElementById('tch-wheel-wrapper');
-    const wheelCanvas     = document.getElementById('tch-wheel-canvas');
-    const lottoCanvas     = document.getElementById('tch-lotto-canvas');
-    const lottoRack       = document.getElementById('tch-lotto-rack');
+    const viewSlot             = document.getElementById('tch-engine-slot');
+    const viewDrum             = document.getElementById('tch-engine-drum');
+    const viewWheel            = document.getElementById('tch-engine-wheel');
+    const viewLotto            = document.getElementById('tch-engine-lotto');
 
-    const candidatePanel  = document.getElementById('tch-candidate-panel');
-    const candidateBadge  = document.getElementById('tch-candidate-ref-badge');
-    const candidateName   = document.getElementById('tch-candidate-name');
-    const candidateMeta   = document.getElementById('tch-candidate-meta');
-    const verifyControls  = document.getElementById('tch-verify-controls');
-    const spinControls    = document.getElementById('tch-spin-controls');
-    const spectatorBanner = document.getElementById('tch-spectator-banner');
-    const btnSpin         = document.getElementById('tch-btn-spin');
-    const btnConfirm      = document.getElementById('tch-btn-confirm');
-    const btnDisqualify   = document.getElementById('tch-btn-disqualify');
-    const btnFullscreen   = document.getElementById('tch-btn-fullscreen');
-    const winnersBox      = document.getElementById('tch-winners-box');
-    const winnersList     = document.getElementById('tch-winners-list');
+    const slotCode             = document.getElementById('tch-slot-code');
+    const drumBarrel           = document.getElementById('tch-drum-barrel');
+    const wheelWrapper         = document.getElementById('tch-wheel-wrapper');
+    const wheelCanvas          = document.getElementById('tch-wheel-canvas');
+    const lottoCanvas          = document.getElementById('tch-lotto-canvas');
+    const lottoRack            = document.getElementById('tch-lotto-rack');
 
-    // Web Audio Synthesizer
+    const candidatePanel       = document.getElementById('tch-candidate-panel');
+    const candidateBadge       = document.getElementById('tch-candidate-ref-badge');
+    const candidateName        = document.getElementById('tch-candidate-name');
+    const candidateMeta        = document.getElementById('tch-candidate-meta');
+    const verifyControls       = document.getElementById('tch-verify-controls');
+    const spinControls         = document.getElementById('tch-spin-controls');
+    const spectatorBanner      = document.getElementById('tch-spectator-banner');
+    const spectatorMsg         = document.getElementById('tch-spectator-msg');
+    const btnSpin              = document.getElementById('tch-btn-spin');
+    const btnConfirm           = document.getElementById('tch-btn-confirm');
+    const btnDisqualify        = document.getElementById('tch-btn-disqualify');
+    const btnFullscreen        = document.getElementById('tch-btn-fullscreen');
+    const winnersBox           = document.getElementById('tch-winners-box');
+    const winnersList          = document.getElementById('tch-winners-list');
+
     function initAudio() {
         if (!audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -104,7 +112,6 @@ document.addEventListener('DOMContentLoaded', function () {
         })();
     }
 
-    // AJAX Helper
     function stageRequest(subAction, extra = {}) {
         const fd = new FormData();
         fd.append('action', 'tch_stage_action');
@@ -115,21 +122,40 @@ document.addEventListener('DOMContentLoaded', function () {
         return fetch(cfg.ajaxUrl, { method: 'POST', body: fd }).then(r => r.json());
     }
 
-    // Unlock UI for Operator
+    // Lock Stage into "Broadcast Ended — Official Result" Mode
+    function showBroadcastEndedScreen(winnerObj) {
+        broadcastEnded                       = true;
+        lastSeenStatus                       = 'winner_confirmed';
+        machineCard.classList.add('is-winner');
+        machineStatus.textContent            = '🏁 LIVE BROADCAST ENDED — OFFICIAL DRAW RESULT';
+        activeEnginesWrapper.style.display   = 'none';
+        candidatePanel.style.display         = 'none';
+        spinControls.style.display           = 'none';
+        verifyControls.style.display         = 'none';
+        broadcastEndedView.style.display     = 'block';
+
+        if (winnerObj) {
+            endedRef.textContent  = winnerObj.ref_code;
+            endedName.textContent = winnerObj.full_name;
+        }
+        if (spectatorMsg) {
+            spectatorMsg.textContent = 'Official Winner Announced — Live Broadcast Ended';
+        }
+    }
+
     function enableOperatorUI() {
         isOperator                    = true;
         operatorToolbar.style.display = 'flex';
         btnPinLogin.style.display     = 'none';
         spectatorBanner.style.display = 'none';
-        if (!isAnimating) {
+        if (!isAnimating && !broadcastEnded) {
             spinControls.style.display = 'block';
         }
-        if (currentCandidate && lastSeenStatus !== 'winner_confirmed') {
+        if (currentCandidate && !broadcastEnded) {
             verifyControls.style.display = 'block';
         }
     }
 
-    // Engine Visibility Switcher
     function setEngineView(engine) {
         activeEngine = engine;
         if (engineSelect) engineSelect.value = engine;
@@ -149,16 +175,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // =========================================================================
-    // ENGINE 2: 3D VERTICAL COLOR DRUM RENDERER
-    // =========================================================================
     function renderDrumBars(items) {
         drumBarrel.innerHTML = items.slice(0, 9).map(txt => `<div class="tch-drum-bar">${escapeHtml(txt)}</div>`).join('');
     }
 
-    // =========================================================================
-    // ENGINE 3 & 4: NEON CYBER WHEEL & CARNIVAL WHEEL CANVAS ENGINE
-    // =========================================================================
     function buildWheelSlices(candidate) {
         const slices = [];
         const source = (candidate && candidate.decoys && candidate.decoys.length) ? candidate.decoys : poolList;
@@ -170,7 +190,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 slices.push(cfg.prefix + (1000 + i));
             }
         }
-        // Index 0 is the winning wedge at top pointer
         slices.unshift(candidate ? candidate.ref_code : (cfg.prefix + 'WIN'));
         return slices;
     }
@@ -187,7 +206,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         ctx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
 
-        // Outer Rim
         ctx.beginPath();
         ctx.arc(cx, cy, radius + 12, 0, 2 * Math.PI);
         ctx.fillStyle = activeEngine === 'cyber_wheel' ? '#082f49' : '#b91c1c';
@@ -196,7 +214,6 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.strokeStyle = activeEngine === 'cyber_wheel' ? '#38bdf8' : '#facc15';
         ctx.stroke();
 
-        // Draw Slices (Centered so slice 0 aligns with top -90deg pointer when rotationDeg=0)
         for (let i = 0; i < count; i++) {
             const startAngle = rotRad + (i * arc) - (Math.PI / 2) - (arc / 2);
             const endAngle   = startAngle + arc;
@@ -217,7 +234,6 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // Slice Label
             ctx.save();
             ctx.translate(cx, cy);
             ctx.rotate(startAngle + arc / 2);
@@ -228,7 +244,6 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.restore();
         }
 
-        // Rim Bulbs / Cyber Ticks
         const bulbCount = 32;
         for (let b = 0; b < bulbCount; b++) {
             const bAngle = (b * 2 * Math.PI) / bulbCount + rotRad;
@@ -241,9 +256,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // =========================================================================
-    // ENGINE 5: LOTTO BALL CAGE PHYSICS SIMULATOR
-    // =========================================================================
     const lottoBalls = [];
     const ballColors = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#a855f7', '#ec4899', '#f97316'];
     let lottoAnimId  = null;
@@ -271,17 +283,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const ctx = lottoCanvas.getContext('2d');
 
         function stepLotto() {
-            if (activeEngine !== 'lotto_cage') return;
+            if (activeEngine !== 'lotto_cage' || broadcastEnded) return;
             ctx.clearRect(0, 0, 320, 320);
             paddleAngle += cageSpeed;
 
-            // Update & Draw Balls
             lottoBalls.forEach(b => {
-                b.vy += 0.18; // Gravity
+                b.vy += 0.18;
                 b.x  += b.vx;
                 b.y  += b.vy;
 
-                // Circular Dome Collision
                 const dx   = b.x - 160;
                 const dy   = b.y - 160;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -292,13 +302,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     const ny = dy / dist;
                     b.x = 160 + nx * maxR;
                     b.y = 160 + ny * maxR;
-                    // Bounce + Paddle Kick
                     const dot = b.vx * nx + b.vy * ny;
                     b.vx = (b.vx - 2 * dot * nx) * 0.85 + (-ny * cageSpeed * 95);
                     b.vy = (b.vy - 2 * dot * ny) * 0.85 + (nx * cageSpeed * 95);
                 }
 
-                // Draw Sphere
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, b.r, 0, 2 * Math.PI);
                 ctx.fillStyle = b.color;
@@ -307,7 +315,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 ctx.strokeStyle = 'rgba(255,255,255,0.65)';
                 ctx.stroke();
 
-                // Number Circle
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, 9, 0, 2 * Math.PI);
                 ctx.fillStyle = '#ffffff';
@@ -319,7 +326,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 ctx.fillText(b.label, b.x, b.y + 3.5);
             });
 
-            // Draw Rotating 4-Blade Metallic Paddle (Matching Attachment 4)
             ctx.save();
             ctx.translate(160, 160);
             ctx.rotate(paddleAngle);
@@ -344,18 +350,17 @@ document.addEventListener('DOMContentLoaded', function () {
         stepLotto();
     }
 
-    // =========================================================================
-    // MASTER ANIMATION RUNNER FOR ALL 5 ENGINES
-    // =========================================================================
     function runStageAnimation(candidate) {
-        isAnimating                  = true;
-        currentCandidate             = candidate;
+        if (broadcastEnded) return;
+        isAnimating                        = true;
+        currentCandidate                   = candidate;
         machineCard.classList.remove('is-winner');
-        candidatePanel.style.display = 'none';
-        spinControls.style.display   = 'none';
-        machineStatus.textContent    = 'SPINNING LIVE DRAW POOL...';
+        broadcastEndedView.style.display   = 'none';
+        activeEnginesWrapper.style.display = 'block';
+        candidatePanel.style.display       = 'none';
+        spinControls.style.display         = 'none';
+        machineStatus.textContent          = 'SPINNING LIVE DRAW POOL...';
 
-        // 1. SLOT ENGINE
         if (activeEngine === 'slot') {
             const totalSteps = 44;
             let step         = 0;
@@ -376,7 +381,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // 2. 3D VERTICAL COLOR DRUM ENGINE
         if (activeEngine === 'drum') {
             const totalSteps = 40;
             let step         = 0;
@@ -392,9 +396,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         ? poolList[Math.floor(Math.random() * poolList.length)].ref_code
                         : cfg.prefix + Math.random().toString(36).substring(2, 7).toUpperCase();
                     rolling.unshift(nextCode);
-                    if (step === totalSteps - 1) {
-                        rolling[4] = candidate.ref_code; // Lock center green bar
-                    }
+                    if (step === totalSteps - 1) rolling[4] = candidate.ref_code;
                     renderDrumBars(rolling);
                     playTick(360 + step * 7);
                     setTimeout(tickDrum, Math.floor(50 + Math.pow(step / totalSteps, 3) * 290));
@@ -407,10 +409,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // 3 & 4. NEON CYBER WHEEL & CARNIVAL SPIN WHEEL
         if (activeEngine === 'cyber_wheel' || activeEngine === 'carnival_wheel') {
             const slices     = buildWheelSlices(candidate);
-            const totalDeg   = 360 * 6; // 6 full rotations landing cleanly on Slice 0 at top pointer
+            const totalDeg   = 360 * 6;
             const duration   = 4600;
             const startTime  = performance.now();
             let lastPegIndex = -1;
@@ -418,7 +419,6 @@ document.addEventListener('DOMContentLoaded', function () {
             function animateWheel(now) {
                 const elapsed  = now - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                // Cubic ease-out
                 const eased    = 1 - Math.pow(1 - progress, 3);
                 const curDeg   = eased * totalDeg;
 
@@ -440,9 +440,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // 5. LOTTO BALL CAGE & CHUTE
         if (activeEngine === 'lotto_cage') {
-            cageSpeed = 0.14; // High-speed tumble
+            cageSpeed = 0.14;
             const cleanChars = candidate.ref_code.replace(cfg.prefix, '').padEnd(5, '•').slice(0, 5).split('');
             lottoRack.innerHTML = `<div class="tch-rack-ball">?</div>`.repeat(5);
             const rackEls = lottoRack.querySelectorAll('.tch-rack-ball');
@@ -475,9 +474,6 @@ document.addEventListener('DOMContentLoaded', function () {
         playFanfare();
     }
 
-    // =========================================================================
-    // REAL-TIME POOL & SPECTATOR HEARTBEAT SYNC (EVERY 2.5 SECONDS)
-    // =========================================================================
     function syncStageState() {
         if (isAnimating) return;
 
@@ -486,7 +482,6 @@ document.addEventListener('DOMContentLoaded', function () {
             poolList              = res.data.pool || [];
             statValid.textContent = res.data.valid_count;
 
-            // Update Winners Podium
             if (res.data.winners && res.data.winners.length > 0) {
                 winnersBox.style.display = 'block';
                 winnersList.innerHTML    = res.data.winners.map(w => `
@@ -502,34 +497,30 @@ document.addEventListener('DOMContentLoaded', function () {
             const ls = res.data.live_state;
             if (!ls) return;
 
-            // Sync Engine Selection if changed by Operator
+            // If Winner is Confirmed, Lock Stage into Broadcast Ended View
+            if (ls.status === 'winner_confirmed' || (res.data.winners && res.data.winners.length > 0)) {
+                const topWinner = (res.data.winners && res.data.winners[0]) ? res.data.winners[0] : ls.candidate;
+                if (!broadcastEnded) {
+                    fireConfetti();
+                    playFanfare();
+                }
+                showBroadcastEndedScreen(topWinner);
+                return;
+            }
+
             if (ls.engine && ls.engine !== activeEngine) {
                 setEngineView(ls.engine);
             }
 
-            // If Operator triggered a new Spin, animate on Spectator screen!
-            if (ls.spin_id && ls.spin_id !== lastSeenSpinId && ls.candidate) {
-                lastSeenSpinId = ls.spin_id;
+            // Only animate if Operator triggered a NEW Spin after this page was opened
+            const incomingSpinId = Number(ls.spin_id || 0);
+            if (incomingSpinId > lastSeenSpinId && ls.status === 'spinning' && ls.candidate) {
+                lastSeenSpinId = incomingSpinId;
                 lastSeenStatus = ls.status;
                 runStageAnimation(ls.candidate);
                 return;
             }
 
-            // If Winner Confirmed by Operator
-            if (ls.status === 'winner_confirmed' && lastSeenStatus !== 'winner_confirmed') {
-                lastSeenStatus               = 'winner_confirmed';
-                machineCard.classList.add('is-winner');
-                machineStatus.textContent    = '🎉 OFFICIAL GRAND PRIZE WINNER CONFIRMED! 🎉';
-                verifyControls.style.display = 'none';
-                if (isOperator) {
-                    spinControls.style.display = 'block';
-                    btnSpin.textContent        = '🎰 DRAW ANOTHER WINNER';
-                }
-                fireConfetti();
-                playFanfare();
-            }
-
-            // If Disqualified by Operator
             if (ls.status === 'disqualified' && lastSeenStatus !== 'disqualified') {
                 lastSeenStatus               = 'disqualified';
                 candidatePanel.style.display = 'none';
@@ -539,7 +530,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }).catch(() => {});
     }
 
-    // Operator Controls Events
     if (engineSelect) {
         engineSelect.addEventListener('change', function () {
             setEngineView(this.value);
@@ -557,7 +547,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     alert(res.data && res.data.message ? res.data.message : 'No eligible tickets remaining.');
                     return;
                 }
-                lastSeenSpinId = res.data.live_state.spin_id;
+                lastSeenSpinId = Number(res.data.live_state.spin_id);
                 lastSeenStatus = 'spinning';
                 runStageAnimation(res.data.candidate);
             });
@@ -570,14 +560,9 @@ document.addEventListener('DOMContentLoaded', function () {
             initAudio();
             stageRequest('confirm_winner', { entry_id: currentCandidate.id }).then(res => {
                 if (res.success) {
-                    lastSeenStatus               = 'winner_confirmed';
-                    machineCard.classList.add('is-winner');
-                    machineStatus.textContent    = '🎉 OFFICIAL GRAND PRIZE WINNER CONFIRMED! 🎉';
-                    verifyControls.style.display = 'none';
-                    spinControls.style.display   = 'block';
-                    btnSpin.textContent          = '🎰 DRAW ANOTHER WINNER';
                     fireConfetti();
                     playFanfare();
+                    showBroadcastEndedScreen(currentCandidate);
                     syncStageState();
                 }
             });
@@ -601,7 +586,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Team Operator PIN Login Modal
     if (btnPinLogin) {
         btnPinLogin.addEventListener('click', () => {
             pinModal.style.display = 'flex';
@@ -630,7 +614,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Fullscreen Button
     if (btnFullscreen) {
         btnFullscreen.addEventListener('click', function () {
             if (!document.fullscreenElement) {
@@ -647,11 +630,16 @@ document.addEventListener('DOMContentLoaded', function () {
         return div.innerHTML;
     }
 
-    // Initialize Default Engine View & Start 2.5s Spectator Sync Heartbeat
+    // Initial Boot
     setEngineView(activeEngine);
+    if (broadcastEnded && cfg.initialWinners && cfg.initialWinners.length > 0) {
+        showBroadcastEndedScreen(cfg.initialWinners[0]);
+    }
     if (operatorPin && !isOperator) {
         stageRequest('verify_pin').then(r => { if (r.success) enableOperatorUI(); });
     }
     syncStageState();
-    setInterval(syncStageState, 2500);
+    setInterval(function () {
+        if (!broadcastEnded) syncStageState();
+    }, 2500);
 });
