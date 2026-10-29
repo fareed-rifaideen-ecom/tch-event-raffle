@@ -69,38 +69,44 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             $c_slug     = $s['campaign_slug'];
             $stage_url  = home_url( '/?tch_live_stage=1' );
 
-            // Fetch confirmed winners for this active campaign (Post-Event Results Podium)
+            // Check if Official Winner is Confirmed for this Active Event
             $winners = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
                     $c_slug
                 )
             );
+            $has_winner = ! empty( $winners );
+
+            $formatted_date      = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
+            $draw_date_raw       = ! empty( $s['live_draw_date'] ) ? $s['live_draw_date'] : $s['event_date'];
+            $formatted_draw_date = date_i18n( 'jS M Y', strtotime( $draw_date_raw ) );
+            $formatted_draw_time = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
+            $draw_full_label     = $formatted_draw_date . ' @ ' . $formatted_draw_time;
 
             wp_enqueue_style( 'tch-raffle-frontend' );
             wp_enqueue_script( 'tch-raffle-frontend' );
 
             wp_localize_script( 'tch-raffle-frontend', 'tchRaffleData', array(
                 'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
+                'stageNonce'=> wp_create_nonce( 'tch_stage_nonce' ),
                 'nonce'     => wp_create_nonce( 'tch_raffle_submit_nonce' ),
                 'nowTs'     => $times['now'],
                 'openTs'    => $times['open'],
                 'closeTs'   => $times['close'],
+                'hasWinner' => $has_winner,
                 'stageUrl'  => $stage_url,
                 'eventName' => $s['event_name'],
-                'eventDate' => date_i18n( 'jS F Y', strtotime( $s['event_date'] ) ),
-                'drawTime'  => date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) ),
+                'eventDate' => $formatted_date,
+                'drawLabel' => $draw_full_label,
             ) );
-
-            $formatted_date = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
-            $formatted_draw = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
 
             ob_start();
             ?>
             <div class="tch-raffle-wrapper" id="tch-raffle-app">
                 <div class="tch-raffle-container">
 
-                    <!-- LEFT COLUMN: Brand Showcase, Prize Image, Countdown & Official Winner Podium -->
+                    <!-- LEFT COLUMN: Brand Showcase, Prize Bike & Countdown (Countdown hidden once Winner is picked) -->
                     <div class="tch-showcase-col">
                         <div class="tch-event-badges">
                             <span class="tch-badge tch-badge-live">
@@ -112,23 +118,15 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                         </div>
 
                         <h1 class="tch-main-headline"><?php echo esc_html( $s['headline'] ); ?></h1>
-                        <p class="tch-subheadline"><?php echo nl2br( esc_html( $s['subheadline'] ) ); ?></p>
-
-                        <!-- Post-Event Official Winner Podium (Displayed automatically when winner is confirmed) -->
-                        <?php if ( ! empty( $winners ) ) : ?>
-                            <div class="tch-public-winners-card">
-                                <div class="tch-pw-header">🏆 OFFICIAL RAFFLE DRAW RESULTS</div>
-                                <?php foreach ( $winners as $w ) : ?>
-                                    <div class="tch-pw-item">
-                                        <div>
-                                            <small>LUCKY WINNER</small>
-                                            <strong><?php echo esc_html( $w->full_name ); ?></strong>
-                                        </div>
-                                        <div class="tch-pw-code"><?php echo esc_html( $w->ref_code ); ?></div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
+                        <p class="tch-subheadline">
+                            <?php
+                            if ( $has_winner ) {
+                                echo esc_html( 'The raffle draw for ' . $s['event_name'] . ' has officially concluded. View the winning ticket result!' );
+                            } else {
+                                echo nl2br( esc_html( $s['subheadline'] ) );
+                            }
+                            ?>
+                        </p>
 
                         <div class="tch-prize-stage">
                             <?php if ( ! empty( $s['prize_image_url'] ) ) : ?>
@@ -140,157 +138,189 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                             <?php endif; ?>
                         </div>
 
-                        <!-- Countdown Timer Bar -->
-                        <div class="tch-countdown-card" id="tch-countdown-box">
-                            <div class="tch-countdown-header">
-                                <span id="tch-timer-status-label">⏳ REGISTRATION CLOSES IN:</span>
-                                <a href="<?php echo esc_url( $stage_url ); ?>" class="tch-draw-pill" style="text-decoration:none;">
-                                    📡 Live Draw Stage: <?php echo esc_html( $formatted_draw ); ?> ↗
-                                </a>
+                        <?php if ( ! $has_winner ) : ?>
+                            <!-- Countdown Timer Bar (Hidden automatically when Winner is confirmed) -->
+                            <div class="tch-countdown-card" id="tch-countdown-box">
+                                <div class="tch-countdown-header">
+                                    <span id="tch-timer-status-label">⏳ REGISTRATION CLOSES IN:</span>
+                                    <span class="tch-draw-pill">Draw: <?php echo esc_html( $draw_full_label ); ?></span>
+                                </div>
+                                <div class="tch-countdown-grid" id="tch-timer-digits">
+                                    <div class="tch-time-unit"><span id="tch-cd-days">00</span><small>Days</small></div>
+                                    <div class="tch-time-sep">:</div>
+                                    <div class="tch-time-unit"><span id="tch-cd-hours">00</span><small>Hours</small></div>
+                                    <div class="tch-time-sep">:</div>
+                                    <div class="tch-time-unit"><span id="tch-cd-mins">00</span><small>Mins</small></div>
+                                    <div class="tch-time-sep">:</div>
+                                    <div class="tch-time-unit"><span id="tch-cd-secs">00</span><small>Secs</small></div>
+                                </div>
                             </div>
-                            <div class="tch-countdown-grid" id="tch-timer-digits">
-                                <div class="tch-time-unit"><span id="tch-cd-days">00</span><small>Days</small></div>
-                                <div class="tch-time-sep">:</div>
-                                <div class="tch-time-unit"><span id="tch-cd-hours">00</span><small>Hours</small></div>
-                                <div class="tch-time-sep">:</div>
-                                <div class="tch-time-unit"><span id="tch-cd-mins">00</span><small>Mins</small></div>
-                                <div class="tch-time-sep">:</div>
-                                <div class="tch-time-unit"><span id="tch-cd-secs">00</span><small>Secs</small></div>
-                            </div>
-                        </div>
+                        <?php endif; ?>
                     </div>
 
-                    <!-- RIGHT COLUMN: 3D Flip Card (Form Front / VIP Ticket Back) + Ticket Status Lookup -->
+                    <!-- RIGHT COLUMN: Either Official Draw Result Card OR Registration Form -->
                     <div class="tch-interaction-col">
-                        <div class="tch-flip-scene" id="tch-flip-scene">
-                            <div class="tch-flip-card" id="tch-flip-card">
 
-                                <!-- CARD FRONT: Registration Form -->
-                                <div class="tch-card-face tch-card-front">
-                                    
-                                    <!-- Closed State Overlay (Shown automatically when timer hits 00:00:00) -->
-                                    <div class="tch-closed-overlay" id="tch-closed-overlay" style="display:none;">
-                                        <div class="tch-closed-icon">🎰</div>
-                                        <h3 id="tch-closed-title">Registration is Now Closed!</h3>
-                                        <p id="tch-closed-msg">The registration countdown has ended. Watch the Live Raffle Draw broadcast or check the official winner results below!</p>
-                                        <a href="<?php echo esc_url( $stage_url ); ?>" class="tch-submit-btn tch-watch-live-btn" style="margin-top:18px;text-decoration:none;display:inline-block;">
-                                            🔴 Watch Live Raffle Draw Now ↗
-                                        </a>
-                                    </div>
+                        <!-- =========================================================
+                             STATE A: OFFICIAL WINNER RESULT CARD (No Form, No Live Links)
+                             ========================================================= -->
+                        <div id="tch-final-winner-card" class="tch-final-winner-card" style="display:<?php echo $has_winner ? 'block' : 'none'; ?>;">
+                            <div class="tch-fw-badge">🏁 RAFFLE DRAW COMPLETED</div>
+                            <div class="tch-fw-trophy">🏆</div>
+                            <h2 class="tch-fw-title">Official Raffle Winner</h2>
+                            <p class="tch-fw-sub"><?php echo esc_html( $s['event_name'] . ' • ' . $s['event_place'] ); ?></p>
 
-                                    <div class="tch-form-header">
-                                        <h2>Claim Your Raffle Ticket</h2>
-                                        <p>Enter your details & complete both steps below</p>
-                                    </div>
-
-                                    <form id="tch-raffle-form" novalidate>
-                                        <!-- Anti-bot Honeypot -->
-                                        <div style="position:absolute;left:-9999px;" aria-hidden="true">
-                                            <input type="text" name="tch_hp_website" tabindex="-1" autocomplete="off">
+                            <div id="tch-fw-winners-list">
+                                <?php if ( $has_winner ) : ?>
+                                    <?php foreach ( $winners as $w ) : ?>
+                                        <div class="tch-fw-ticket-box">
+                                            <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
+                                            <div class="tch-fw-ref-code"><?php echo esc_html( $w->ref_code ); ?></div>
+                                            <div class="tch-fw-winner-name">🎉 <?php echo esc_html( $w->full_name ); ?></div>
                                         </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
 
-                                        <div class="tch-field-group">
-                                            <label for="tch_full_name">Full Name <span>*</span></label>
-                                            <input type="text" id="tch_full_name" name="full_name" placeholder="e.g. John Meyer" required autocomplete="name">
-                                        </div>
+                            <p class="tch-fw-footer-note">Thank you to everyone who visited The Cycle Hub booth and participated in the giveaway!</p>
+                        </div>
 
-                                        <div class="tch-field-row">
-                                            <div class="tch-field-group">
-                                                <label for="tch_email">Email Address <span>*</span></label>
-                                                <input type="email" id="tch_email" name="email" placeholder="you@example.com" required autocomplete="email">
-                                            </div>
-                                            <div class="tch-field-group">
-                                                <label for="tch_phone">Mobile / WhatsApp <span>*</span></label>
-                                                <input type="tel" id="tch_phone" name="phone" placeholder="+971 50 123 4567" required autocomplete="tel">
-                                            </div>
-                                        </div>
+                        <?php if ( ! $has_winner ) : ?>
+                            <!-- =========================================================
+                                 STATE B: REGISTRATION FORM & 3D FLIP VIP TICKET
+                                 ========================================================= -->
+                            <div class="tch-flip-scene" id="tch-flip-scene">
+                                <div class="tch-flip-card" id="tch-flip-card">
 
-                                        <!-- Interactive Social Checkboxes -->
-                                        <div class="tch-social-steps">
-                                            <div class="tch-step-box">
-                                                <label class="tch-checkbox-label">
-                                                    <input type="checkbox" name="ig_confirmed" id="tch_ig_check" value="1" required>
-                                                    <span class="tch-custom-check"></span>
-                                                    <span class="tch-check-text"><?php echo esc_html( $s['ig_label'] ); ?></span>
-                                                </label>
-                                                <a href="<?php echo esc_url( $s['ig_url'] ); ?>" target="_blank" rel="noopener" class="tch-social-btn tch-ig-btn">
-                                                    📸 Open Instagram ↗
-                                                </a>
-                                            </div>
-
-                                            <div class="tch-step-box">
-                                                <label class="tch-checkbox-label">
-                                                    <input type="checkbox" name="yt_confirmed" id="tch_yt_check" value="1" required>
-                                                    <span class="tch-custom-check"></span>
-                                                    <span class="tch-check-text"><?php echo esc_html( $s['yt_label'] ); ?></span>
-                                                </label>
-                                                <a href="<?php echo esc_url( $s['yt_url'] ); ?>" target="_blank" rel="noopener" class="tch-social-btn tch-yt-btn">
-                                                    ▶️ Subscribe YouTube ↗
-                                                </a>
-                                            </div>
-                                        </div>
-
-                                        <div id="tch-form-feedback" class="tch-form-feedback" style="display:none;"></div>
-
-                                        <button type="submit" id="tch-submit-btn" class="tch-submit-btn">
-                                            <span class="tch-btn-text">Get My Raffle Ticket 🎟️</span>
-                                            <span class="tch-btn-loader" style="display:none;">Generating Ticket...</span>
-                                        </button>
-
-                                        <div class="tch-form-footer">
-                                            <span>By registering, you agree to the </span>
-                                            <button type="button" id="tch-open-terms" class="tch-link-btn">Raffle Terms & Conditions</button>
-                                        </div>
-                                    </form>
-                                </div>
-
-                                <!-- CARD BACK: 3D Flip VIP Raffle Ticket -->
-                                <div class="tch-card-face tch-card-back">
-                                    <div class="tch-vip-ticket">
-                                        <div class="tch-ticket-top">
-                                            <span class="tch-ticket-tag">OFFICIAL RAFFLE DRAW ENTRY</span>
-                                            <h3><?php echo esc_html( $s['event_name'] ); ?></h3>
-                                            <p><?php echo esc_html( $s['event_place'] ); ?> • <?php echo esc_html( $formatted_date ); ?></p>
-                                        </div>
-
-                                        <div class="tch-ticket-divider">
-                                            <span class="tch-dashed-line"></span>
-                                        </div>
-
-                                        <div class="tch-ticket-body">
-                                            <span class="tch-ref-label">YOUR UNIQUE REFERENCE NUMBER</span>
-                                            <div class="tch-ref-code" id="tch-ticket-ref">TCH-0000</div>
-                                            <p class="tch-screenshot-hint">📸 Screenshot this ticket & check your email!</p>
-
-                                            <div class="tch-ticket-meta">
-                                                <div>
-                                                    <small>PARTICIPANT</small>
-                                                    <strong id="tch-ticket-name">-</strong>
-                                                </div>
-                                                <div>
-                                                    <small>LIVE DRAW TIME</small>
-                                                    <strong><?php echo esc_html( $formatted_draw ); ?></strong>
-                                                </div>
-                                            </div>
-
-                                            <a href="<?php echo esc_url( $stage_url ); ?>" class="tch-live-stage-link-btn">
-                                                📡 Open Live Draw Broadcast Screen ↗
+                                    <!-- CARD FRONT: Registration Form -->
+                                    <div class="tch-card-face tch-card-front">
+                                        
+                                        <!-- Closed State Overlay (Shown when timer hits 00:00:00 before winner is picked) -->
+                                        <div class="tch-closed-overlay" id="tch-closed-overlay" style="display:none;">
+                                            <div class="tch-closed-icon">🎰</div>
+                                            <h3 id="tch-closed-title">Registration is Now Closed!</h3>
+                                            <p id="tch-closed-msg">
+                                                Registration has ended. Join the Live Raffle Draw broadcast scheduled for <strong><?php echo esc_html( $draw_full_label ); ?></strong>!
+                                            </p>
+                                            <a href="<?php echo esc_url( $stage_url ); ?>" id="tch-watch-live-btn" class="tch-submit-btn tch-watch-live-btn" style="margin-top:18px;text-decoration:none;display:inline-block;">
+                                                🔴 Watch Live Raffle Draw Now ↗
                                             </a>
                                         </div>
 
-                                        <div class="tch-ticket-footer">
-                                            <p>Sent from <strong><?php echo esc_html( $s['sender_email'] ); ?></strong></p>
+                                        <div class="tch-form-header">
+                                            <h2>Claim Your Raffle Ticket</h2>
+                                            <p>Enter your details & complete both steps below</p>
+                                        </div>
+
+                                        <form id="tch-raffle-form" novalidate>
+                                            <!-- Anti-bot Honeypot -->
+                                            <div style="position:absolute;left:-9999px;" aria-hidden="true">
+                                                <input type="text" name="tch_hp_website" tabindex="-1" autocomplete="off">
+                                            </div>
+
+                                            <div class="tch-field-group">
+                                                <label for="tch_full_name">Full Name <span>*</span></label>
+                                                <input type="text" id="tch_full_name" name="full_name" placeholder="e.g. John Meyer" required autocomplete="name">
+                                            </div>
+
+                                            <div class="tch-field-row">
+                                                <div class="tch-field-group">
+                                                    <label for="tch_email">Email Address <span>*</span></label>
+                                                    <input type="email" id="tch_email" name="email" placeholder="you@example.com" required autocomplete="email">
+                                                </div>
+                                                <div class="tch-field-group">
+                                                    <label for="tch_phone">Mobile / WhatsApp <span>*</span></label>
+                                                    <input type="tel" id="tch_phone" name="phone" placeholder="+971 50 123 4567" required autocomplete="tel">
+                                                </div>
+                                            </div>
+
+                                            <!-- Interactive Social Checkboxes -->
+                                            <div class="tch-social-steps">
+                                                <div class="tch-step-box">
+                                                    <label class="tch-checkbox-label">
+                                                        <input type="checkbox" name="ig_confirmed" id="tch_ig_check" value="1" required>
+                                                        <span class="tch-custom-check"></span>
+                                                        <span class="tch-check-text"><?php echo esc_html( $s['ig_label'] ); ?></span>
+                                                    </label>
+                                                    <a href="<?php echo esc_url( $s['ig_url'] ); ?>" target="_blank" rel="noopener" class="tch-social-btn tch-ig-btn">
+                                                        📸 Open Instagram ↗
+                                                    </a>
+                                                </div>
+
+                                                <div class="tch-step-box">
+                                                    <label class="tch-checkbox-label">
+                                                        <input type="checkbox" name="yt_confirmed" id="tch_yt_check" value="1" required>
+                                                        <span class="tch-custom-check"></span>
+                                                        <span class="tch-check-text"><?php echo esc_html( $s['yt_label'] ); ?></span>
+                                                    </label>
+                                                    <a href="<?php echo esc_url( $s['yt_url'] ); ?>" target="_blank" rel="noopener" class="tch-social-btn tch-yt-btn">
+                                                        ▶️ Subscribe YouTube ↗
+                                                    </a>
+                                                </div>
+                                            </div>
+
+                                            <div id="tch-form-feedback" class="tch-form-feedback" style="display:none;"></div>
+
+                                            <button type="submit" id="tch-submit-btn" class="tch-submit-btn">
+                                                <span class="tch-btn-text">Get My Raffle Ticket 🎟️</span>
+                                                <span class="tch-btn-loader" style="display:none;">Generating Ticket...</span>
+                                            </button>
+
+                                            <div class="tch-form-footer">
+                                                <span>By registering, you agree to the </span>
+                                                <button type="button" id="tch-open-terms" class="tch-link-btn">Raffle Terms & Conditions</button>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    <!-- CARD BACK: 3D Flip VIP Raffle Ticket -->
+                                    <div class="tch-card-face tch-card-back">
+                                        <div class="tch-vip-ticket">
+                                            <div class="tch-ticket-top">
+                                                <span class="tch-ticket-tag">OFFICIAL RAFFLE DRAW ENTRY</span>
+                                                <h3><?php echo esc_html( $s['event_name'] ); ?></h3>
+                                                <p><?php echo esc_html( $s['event_place'] ); ?> • <?php echo esc_html( $formatted_date ); ?></p>
+                                            </div>
+
+                                            <div class="tch-ticket-divider">
+                                                <span class="tch-dashed-line"></span>
+                                            </div>
+
+                                            <div class="tch-ticket-body">
+                                                <span class="tch-ref-label">YOUR UNIQUE REFERENCE NUMBER</span>
+                                                <div class="tch-ref-code" id="tch-ticket-ref">TCH-0000</div>
+                                                <p class="tch-screenshot-hint">📸 Screenshot this ticket & check your email!</p>
+
+                                                <div class="tch-ticket-meta">
+                                                    <div>
+                                                        <small>PARTICIPANT</small>
+                                                        <strong id="tch-ticket-name">-</strong>
+                                                    </div>
+                                                    <div>
+                                                        <small>LIVE DRAW SCHEDULE</small>
+                                                        <strong><?php echo esc_html( $draw_full_label ); ?></strong>
+                                                    </div>
+                                                </div>
+
+                                                <a href="<?php echo esc_url( $stage_url ); ?>" id="tch-ticket-live-link" class="tch-live-stage-link-btn">
+                                                    📡 Open Live Draw Broadcast Screen ↗
+                                                </a>
+                                            </div>
+
+                                            <div class="tch-ticket-footer">
+                                                <p>Sent from <strong><?php echo esc_html( $s['sender_email'] ); ?></strong></p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
+                                </div>
                             </div>
-                        </div>
+                        <?php endif; ?>
 
                         <!-- Compact Participant Ticket Lookup & Result Verification Bar -->
                         <div class="tch-lookup-card">
                             <div class="tch-lookup-header">
-                                <span>🔍 Already Registered? Verify Ticket or Check Draw Result:</span>
+                                <span>🔍 Verify Your Ticket Status:</span>
                             </div>
                             <form id="tch-lookup-form" class="tch-lookup-form">
                                 <input type="text" id="tch-lookup-input" placeholder="Enter Ticket ID (e.g. TCH-84K9) or Email..." required>
@@ -324,7 +354,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
         }
 
         /**
-         * Handle Frontend Form AJAX Submission (Scoped to Active Campaign Slug)
+         * Handle Frontend Form AJAX Submission
          */
         public function handle_ajax_submission() {
             check_ajax_referer( 'tch_raffle_submit_nonce', 'nonce' );
@@ -333,11 +363,15 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                 wp_send_json_error( array( 'message' => 'Spam detected.' ) );
             }
 
-            $s      = tch_raffle_get_settings();
-            $c_slug = $s['campaign_slug'];
-            $times  = $this->get_schedule_timestamps( $s );
+            global $wpdb;
+            $s          = tch_raffle_get_settings();
+            $c_slug     = $s['campaign_slug'];
+            $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
+            $times      = $this->get_schedule_timestamps( $s );
 
-            if ( $times['now'] > $times['close'] ) {
+            // Reject if Winner is already selected or time expired
+            $winner_exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) );
+            if ( $winner_exists > 0 || $times['now'] > $times['close'] ) {
                 wp_send_json_error( array( 'message' => 'Sorry, registration for this raffle draw has officially closed!' ) );
             }
 
@@ -356,10 +390,6 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                 wp_send_json_error( array( 'message' => 'Please complete both Instagram and YouTube steps and tick the checkboxes.' ) );
             }
 
-            global $wpdb;
-            $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
-
-            // Check for Existing Registration within THIS Active Campaign
             $existing = $wpdb->get_row(
                 $wpdb->prepare(
                     "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND (email = %s OR phone = %s) LIMIT 1",
@@ -492,10 +522,12 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             add_filter( 'wp_mail_from_name', $from_name_cb, 999 );
             add_filter( 'wp_mail_content_type', $html_type_cb, 999 );
 
-            $subject        = '🎟️ Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
-            $formatted_date = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
-            $formatted_draw = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
-            $stage_url      = home_url( '/?tch_live_stage=1' );
+            $subject             = '🎟️ Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
+            $formatted_date      = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
+            $draw_date_raw       = ! empty( $s['live_draw_date'] ) ? $s['live_draw_date'] : $s['event_date'];
+            $formatted_draw_date = date_i18n( 'jS M Y', strtotime( $draw_date_raw ) );
+            $formatted_draw_time = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
+            $stage_url           = home_url( '/?tch_live_stage=1' );
 
             $body = '
             <div style="background-color:#0f172a;padding:35px 15px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
@@ -520,8 +552,8 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                 <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $formatted_date ) . '</td>
                             </tr>
                             <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">⏰ Live Draw Time:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;color:#eab308;">' . esc_html( $formatted_draw ) . '</td>
+                                <td style="padding:6px 0;color:#94a3b8;">⏰ Live Draw Schedule:</td>
+                                <td style="padding:6px 0;text-align:right;font-weight:600;color:#eab308;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
                             </tr>
                         </table>
                         <div style="margin-top:22px;">
