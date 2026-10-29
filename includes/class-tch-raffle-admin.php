@@ -153,10 +153,10 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 $new_slug   = sanitize_title( $new_name . '-' . $new_date );
 
                 $s['campaign_slug'] = $new_slug;
-                $s['event_name']    => $new_name;
-                $s['event_place']   => $new_place;
-                $s['event_date']    => $new_date;
-                $s['ticket_prefix'] => $new_prefix;
+                $s['event_name']    = $new_name;
+                $s['event_place']   = $new_place;
+                $s['event_date']    = $new_date;
+                $s['ticket_prefix'] = $new_prefix;
 
                 update_option( 'tch_raffle_settings', $s );
                 tch_raffle_update_live_state( array(
