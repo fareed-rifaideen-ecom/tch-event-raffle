@@ -1,16 +1,20 @@
 /**
- * TCH Event Raffle v2.0 — Countdown Timer, Auto-Lock, 3D Ticket Flip & Ticket Lookup
+ * TCH Event Raffle v2.1 — Countdown Timer, Auto-Lock, Winner Result Transition & Ticket Lookup
  */
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof tchRaffleData === 'undefined') return;
 
-    const form          = document.getElementById('tch-raffle-form');
-    const flipCard      = document.getElementById('tch-flip-card');
-    const submitBtn     = document.getElementById('tch-submit-btn');
-    const btnText       = submitBtn.querySelector('.tch-btn-text');
-    const btnLoader     = submitBtn.querySelector('.tch-btn-loader');
-    const feedbackBox   = document.getElementById('tch-form-feedback');
-    const closedOverlay = document.getElementById('tch-closed-overlay');
+    const form            = document.getElementById('tch-raffle-form');
+    const flipScene       = document.getElementById('tch-flip-scene');
+    const flipCard        = document.getElementById('tch-flip-card');
+    const countdownBox    = document.getElementById('tch-countdown-box');
+    const finalWinnerCard = document.getElementById('tch-final-winner-card');
+    const fwWinnersList   = document.getElementById('tch-fw-winners-list');
+    const submitBtn       = document.getElementById('tch-submit-btn');
+    const feedbackBox     = document.getElementById('tch-form-feedback');
+    const closedOverlay   = document.getElementById('tch-closed-overlay');
+
+    let hasWinner         = Boolean(tchRaffleData.hasWinner);
 
     // Countdown Elements
     const elDays  = document.getElementById('tch-cd-days');
@@ -18,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const elMins  = document.getElementById('tch-cd-mins');
     const elSecs  = document.getElementById('tch-cd-secs');
 
-    // Sync client clock offset with WordPress server timestamp (GST)
     const clientLoadTime = Math.floor(Date.now() / 1000);
     const serverOffset   = parseInt(tchRaffleData.nowTs, 10) - clientLoadTime;
     const closeTs        = parseInt(tchRaffleData.closeTs, 10);
@@ -28,6 +31,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateCountdown() {
+        if (hasWinner || !elDays) return false;
+
         const currentServerTime = Math.floor(Date.now() / 1000) + serverOffset;
         const remaining         = closeTs - currentServerTime;
 
@@ -36,8 +41,8 @@ document.addEventListener('DOMContentLoaded', function () {
             elHours.textContent = '00';
             elMins.textContent  = '00';
             elSecs.textContent  = '00';
-            closedOverlay.style.display = 'flex';
-            submitBtn.disabled = true;
+            if (closedOverlay) closedOverlay.style.display = 'flex';
+            if (submitBtn) submitBtn.disabled = true;
             return false;
         }
 
@@ -53,12 +58,47 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
-    if (updateCountdown()) {
+    if (!hasWinner && updateCountdown()) {
         const timerInterval = setInterval(function () {
             if (!updateCountdown()) {
                 clearInterval(timerInterval);
             }
         }, 1000);
+    }
+
+    // Background Poll: If Winner is Confirmed on Stage, Immediately Hide Form & Live Links and Show Winner Result
+    function checkIfWinnerConfirmed() {
+        if (hasWinner) return;
+
+        const fd = new FormData();
+        fd.append('action', 'tch_stage_action');
+        fd.append('nonce', tchRaffleData.stageNonce);
+        fd.append('sub_action', 'get_pool');
+
+        fetch(tchRaffleData.ajaxUrl, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.data.winners && res.data.winners.length > 0) {
+                    hasWinner = true;
+                    if (flipScene) flipScene.style.display = 'none';
+                    if (countdownBox) countdownBox.style.display = 'none';
+                    if (finalWinnerCard && fwWinnersList) {
+                        fwWinnersList.innerHTML = res.data.winners.map(w => `
+                            <div class="tch-fw-ticket-box">
+                                <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
+                                <div class="tch-fw-ref-code">${escapeHtml(w.ref_code)}</div>
+                                <div class="tch-fw-winner-name">🎉 ${escapeHtml(w.full_name)}</div>
+                            </div>
+                        `).join('');
+                        finalWinnerCard.style.display = 'block';
+                    }
+                }
+            })
+            .catch(() => {});
+    }
+
+    if (!hasWinner) {
+        setInterval(checkIfWinnerConfirmed, 5000);
     }
 
     // Highlight social step boxes when ticked
@@ -80,6 +120,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const acceptTerms = document.getElementById('tch-accept-terms');
 
     function toggleModal(show) {
+        if (!modal) return;
         if (show) {
             modal.classList.add('is-open');
         } else {
@@ -97,7 +138,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // AJAX Form Submission & 3D Ticket Flip
-    if (form) {
+    if (form && submitBtn) {
+        const btnText   = submitBtn.querySelector('.tch-btn-text');
+        const btnLoader = submitBtn.querySelector('.tch-btn-loader');
+
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             feedbackBox.style.display = 'none';
@@ -136,15 +180,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     document.getElementById('tch-ticket-ref').textContent  = response.data.ref_code;
                     document.getElementById('tch-ticket-name').textContent = response.data.full_name;
                     flipCard.classList.add('is-flipped');
-                    window.scrollTo({ top: flipCard.offsetTop - 40, behavior: 'smooth' });
+                    window.scrollTo({ top: flipCard.offsetTop - 20, behavior: 'smooth' });
                 } else {
                     showError(response.data && response.data.message ? response.data.message : 'Something went wrong. Please try again.');
-                    resetButton();
+                    resetButton(btnText, btnLoader);
                 }
             })
             .catch(() => {
                 showError('Network error. Please check your connection and try again.');
-                resetButton();
+                resetButton(btnText, btnLoader);
             });
         });
     }
@@ -193,12 +237,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function showError(msg) {
+        if (!feedbackBox) return;
         feedbackBox.textContent   = msg;
         feedbackBox.className     = 'tch-form-feedback is-error';
         feedbackBox.style.display = 'block';
     }
 
-    function resetButton() {
+    function resetButton(btnText, btnLoader) {
+        if (!submitBtn) return;
         submitBtn.disabled      = false;
         btnText.style.display   = 'inline';
         btnLoader.style.display = 'none';
