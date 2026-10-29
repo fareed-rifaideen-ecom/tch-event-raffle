@@ -464,6 +464,9 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
 
             // Distinct campaigns in DB
             $db_campaigns = $wpdb->get_col( "SELECT DISTINCT campaign_slug FROM `$table_name` ORDER BY id DESC" );
+            if ( ! is_array( $db_campaigns ) ) {
+                $db_campaigns = array();
+            }
             if ( ! in_array( $s['campaign_slug'], $db_campaigns, true ) ) {
                 array_unshift( $db_campaigns, $s['campaign_slug'] );
             }
@@ -488,6 +491,10 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             $entries = ! empty( $prepare_args )
                 ? $wpdb->get_results( $wpdb->prepare( $query_sql, $prepare_args ) )
                 : $wpdb->get_results( $query_sql );
+
+            if ( ! is_array( $entries ) ) {
+                $entries = array();
+            }
 
             $export_url = wp_nonce_url(
                 add_query_arg( array(
@@ -545,7 +552,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                             <tr><td colspan="8">No raffle entries found for this filter.</td></tr>
                         <?php else : ?>
                             <?php foreach ( $entries as $row ) : 
-                                $del_url = wp_nonce_url( admin_url( 'admin.php?page=tch-raffle-entries&action=delete_entry&entry_id=' . $row->id ), 'tch_delete_entry_nonce' );
+                                $del_url  = wp_nonce_url( admin_url( 'admin.php?page=tch-raffle-entries&action=delete_entry&entry_id=' . $row->id ), 'tch_delete_entry_nonce' );
                                 $badge_bg = 'winner' === $row->status ? '#16a34a' : ( 'disqualified' === $row->status ? '#dc2626' : '#475569' );
                             ?>
                                 <tr>
