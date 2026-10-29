@@ -3,7 +3,7 @@
  * Plugin Name:       TCH Event Raffle Engine
  * Plugin URI:        https://thecyclehub.com
  * Description:       Multi-Event Raffle Landing Page, Countdown Timer, VIP Ticket Generator & 5-Engine Live Broadcast Stage for The Cycle Hub.
- * Version:           2.0.0
+ * Version:           2.0.1
  * Author:            Fareed Rifaideen - The Cycle Hub
  * Text Domain:       tch-event-raffle
  */
@@ -12,24 +12,24 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-if ( ! defined( 'TCH_RAFFLE_VERSION' ) ) {
-    define( 'TCH_RAFFLE_VERSION', '2.0.0' );
+// Guard against duplicate plugin folder activation
+if ( defined( 'TCH_RAFFLE_LOADED' ) ) {
+    return;
 }
-if ( ! defined( 'TCH_RAFFLE_PATH' ) ) {
-    define( 'TCH_RAFFLE_PATH', plugin_dir_path( __FILE__ ) );
-}
-if ( ! defined( 'TCH_RAFFLE_URL' ) ) {
-    define( 'TCH_RAFFLE_URL', plugin_dir_url( __FILE__ ) );
-}
-if ( ! defined( 'TCH_RAFFLE_TABLE' ) ) {
-    define( 'TCH_RAFFLE_TABLE', 'tch_raffle_entries' );
-}
+define( 'TCH_RAFFLE_LOADED', true );
+define( 'TCH_RAFFLE_VERSION', '2.0.1' );
+define( 'TCH_RAFFLE_PATH', plugin_dir_path( __FILE__ ) );
+define( 'TCH_RAFFLE_URL', plugin_dir_url( __FILE__ ) );
+define( 'TCH_RAFFLE_TABLE', 'tch_raffle_entries' );
 
 /**
  * Check if current logged-in user is an Admin, Shop Manager, or Editor
  */
 if ( ! function_exists( 'tch_raffle_user_can_operate' ) ) {
     function tch_raffle_user_can_operate() {
+        if ( ! function_exists( 'current_user_can' ) ) {
+            return false;
+        }
         return current_user_can( 'manage_options' ) || current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_pages' );
     }
 }
@@ -39,6 +39,9 @@ if ( ! function_exists( 'tch_raffle_user_can_operate' ) ) {
  */
 if ( ! function_exists( 'tch_raffle_admin_cap' ) ) {
     function tch_raffle_admin_cap() {
+        if ( ! function_exists( 'current_user_can' ) ) {
+            return 'manage_options';
+        }
         if ( current_user_can( 'manage_options' ) ) {
             return 'manage_options';
         }
@@ -50,64 +53,60 @@ if ( ! function_exists( 'tch_raffle_admin_cap' ) ) {
 }
 
 /**
- * 1. Database Setup & Auto-Migration to v2.0 (Adds campaign_slug & Composite Keys)
+ * 1. Crash-Proof Database Setup & Auto-Migration to v2.0.1
  */
 if ( ! function_exists( 'tch_raffle_check_db_schema' ) ) {
     function tch_raffle_check_db_schema() {
         global $wpdb;
+        if ( ! isset( $wpdb ) ) {
+            return;
+        }
+
         $table_name      = $wpdb->prefix . TCH_RAFFLE_TABLE;
         $charset_collate = $wpdb->get_charset_collate();
 
-        $sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `campaign_slug` VARCHAR(60) NOT NULL DEFAULT 'sa-day-els-2026',
-            `ref_code` VARCHAR(25) NOT NULL,
-            `full_name` VARCHAR(150) NOT NULL,
-            `email` VARCHAR(150) NOT NULL,
-            `phone` VARCHAR(50) NOT NULL,
-            `ig_confirmed` TINYINT(1) DEFAULT 1,
-            `yt_confirmed` TINYINT(1) DEFAULT 1,
-            `status` VARCHAR(20) DEFAULT 'valid',
-            `ip_address` VARCHAR(45) DEFAULT NULL,
-            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `unique_ref` (`ref_code`),
-            UNIQUE KEY `unique_campaign_email` (`campaign_slug`, `email`),
-            UNIQUE KEY `unique_campaign_phone` (`campaign_slug`, `phone`),
-            KEY `campaign_status_idx` (`campaign_slug`, `status`)
-        ) $charset_collate;";
+        $prev_suppress = $wpdb->suppress_errors( true );
 
         try {
+            $sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
+                `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `campaign_slug` VARCHAR(60) NOT NULL DEFAULT 'sa-day-els-2026',
+                `ref_code` VARCHAR(25) NOT NULL,
+                `full_name` VARCHAR(150) NOT NULL,
+                `email` VARCHAR(150) NOT NULL,
+                `phone` VARCHAR(50) NOT NULL,
+                `ig_confirmed` TINYINT(1) DEFAULT 1,
+                `yt_confirmed` TINYINT(1) DEFAULT 1,
+                `status` VARCHAR(20) DEFAULT 'valid',
+                `ip_address` VARCHAR(45) DEFAULT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `unique_ref` (`ref_code`),
+                KEY `campaign_status_idx` (`campaign_slug`, `status`)
+            ) $charset_collate;";
+
             $wpdb->query( $sql );
 
             // Check if upgrading from v1.0 (missing campaign_slug column)
             $col_exists = $wpdb->get_results( "SHOW COLUMNS FROM `$table_name` LIKE 'campaign_slug'" );
             if ( empty( $col_exists ) ) {
                 $wpdb->query( "ALTER TABLE `$table_name` ADD COLUMN `campaign_slug` VARCHAR(60) NOT NULL DEFAULT 'sa-day-els-2026' AFTER `id`" );
-                $wpdb->query( "ALTER TABLE `$table_name` ADD INDEX `campaign_status_idx` (`campaign_slug`, `status`)" );
-
-                // Replace old single-event unique indexes with multi-event composite unique indexes
-                $old_email_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_email'" );
-                if ( ! empty( $old_email_idx ) ) {
-                    $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_email`" );
-                }
-                $old_phone_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_phone'" );
-                if ( ! empty( $old_phone_idx ) ) {
-                    $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_phone`" );
-                }
-
-                $new_email_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_campaign_email'" );
-                if ( empty( $new_email_idx ) ) {
-                    $wpdb->query( "ALTER TABLE `$table_name` ADD UNIQUE KEY `unique_campaign_email` (`campaign_slug`, `email`)" );
-                }
-                $new_phone_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_campaign_phone'" );
-                if ( empty( $new_phone_idx ) ) {
-                    $wpdb->query( "ALTER TABLE `$table_name` ADD UNIQUE KEY `unique_campaign_phone` (`campaign_slug`, `phone`)" );
-                }
             }
-        } catch ( Exception $e ) {
-            // Safe catch for strict SQL modes
+
+            // Drop old single-event unique locks if they exist so multi-event entries work smoothly
+            $old_email_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_email'" );
+            if ( ! empty( $old_email_idx ) ) {
+                $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_email`" );
+            }
+            $old_phone_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_phone'" );
+            if ( ! empty( $old_phone_idx ) ) {
+                $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_phone`" );
+            }
+        } catch ( Throwable $e ) {
+            // Catch both Error and Exception in PHP 8.x
         }
+
+        $wpdb->suppress_errors( $prev_suppress );
     }
 }
 
@@ -127,7 +126,7 @@ if ( ! function_exists( 'tch_raffle_activate' ) ) {
 register_activation_hook( __FILE__, 'tch_raffle_activate' );
 
 /**
- * Auto-run DB migration if version changed via Git Deploy Manager
+ * Auto-run DB migration after Git Deploy Manager pulls new code
  */
 add_action( 'init', function() {
     if ( get_option( 'tch_raffle_db_version' ) !== TCH_RAFFLE_VERSION ) {
@@ -154,7 +153,7 @@ if ( ! function_exists( 'tch_raffle_get_settings' ) ) {
             'close_time'      => '21:00',
             'live_draw_time'  => '21:15',
             'ticket_prefix'   => 'TCH-',
-            'stage_engine'    => 'slot', // slot, drum, cyber_wheel, carnival_wheel, lotto_cage
+            'stage_engine'    => 'slot',
             'operator_pin'    => '2026',
             'prize_image_url' => '',
             'headline'        => 'Win a Brand New Bike at South African Day!',
@@ -181,7 +180,7 @@ if ( ! function_exists( 'tch_raffle_get_live_state' ) ) {
             $state = array();
         }
         return wp_parse_args( $state, array(
-            'status'        => 'idle', // idle, spinning, verifying, winner_confirmed, disqualified
+            'status'        => 'idle',
             'engine'        => $s['stage_engine'],
             'spin_id'       => 0,
             'candidate'     => null,
