@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       TCH Event Raffle Engine
  * Plugin URI:        https://thecyclehub.com
- * Description:       Multi-Event Raffle Landing Page, Countdown Timer, VIP Ticket Generator & 5-Engine Live Broadcast Stage for The Cycle Hub.
- * Version:           2.0.1
+ * Description:       Multi-Event Raffle Landing Page, Countdown Timer, VIP Ticket Generator, Team Portal & 5-Engine Live Broadcast Stage for The Cycle Hub.
+ * Version:           2.1.0
  * Author:            Fareed Rifaideen - The Cycle Hub
  * Text Domain:       tch-event-raffle
  */
@@ -12,12 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// Guard against duplicate plugin folder activation
 if ( defined( 'TCH_RAFFLE_LOADED' ) ) {
     return;
 }
 define( 'TCH_RAFFLE_LOADED', true );
-define( 'TCH_RAFFLE_VERSION', '2.0.1' );
+define( 'TCH_RAFFLE_VERSION', '2.1.0' );
 define( 'TCH_RAFFLE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'TCH_RAFFLE_URL', plugin_dir_url( __FILE__ ) );
 define( 'TCH_RAFFLE_TABLE', 'tch_raffle_entries' );
@@ -53,7 +52,7 @@ if ( ! function_exists( 'tch_raffle_admin_cap' ) ) {
 }
 
 /**
- * 1. Crash-Proof Database Setup & Auto-Migration to v2.0.1
+ * 1. Crash-Proof Database Setup & Auto-Migration
  */
 if ( ! function_exists( 'tch_raffle_check_db_schema' ) ) {
     function tch_raffle_check_db_schema() {
@@ -87,13 +86,11 @@ if ( ! function_exists( 'tch_raffle_check_db_schema' ) ) {
 
             $wpdb->query( $sql );
 
-            // Check if upgrading from v1.0 (missing campaign_slug column)
             $col_exists = $wpdb->get_results( "SHOW COLUMNS FROM `$table_name` LIKE 'campaign_slug'" );
             if ( empty( $col_exists ) ) {
                 $wpdb->query( "ALTER TABLE `$table_name` ADD COLUMN `campaign_slug` VARCHAR(60) NOT NULL DEFAULT 'sa-day-els-2026' AFTER `id`" );
             }
 
-            // Drop old single-event unique locks if they exist so multi-event entries work smoothly
             $old_email_idx = $wpdb->get_results( "SHOW INDEX FROM `$table_name` WHERE Key_name = 'unique_email'" );
             if ( ! empty( $old_email_idx ) ) {
                 $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_email`" );
@@ -103,7 +100,7 @@ if ( ! function_exists( 'tch_raffle_check_db_schema' ) ) {
                 $wpdb->query( "ALTER TABLE `$table_name` DROP INDEX `unique_phone`" );
             }
         } catch ( Throwable $e ) {
-            // Catch both Error and Exception in PHP 8.x
+            // Safe catch for PHP 8+
         }
 
         $wpdb->suppress_errors( $prev_suppress );
@@ -125,9 +122,6 @@ if ( ! function_exists( 'tch_raffle_activate' ) ) {
 }
 register_activation_hook( __FILE__, 'tch_raffle_activate' );
 
-/**
- * Auto-run DB migration after Git Deploy Manager pulls new code
- */
 add_action( 'init', function() {
     if ( get_option( 'tch_raffle_db_version' ) !== TCH_RAFFLE_VERSION ) {
         tch_raffle_check_db_schema();
@@ -145,32 +139,34 @@ if ( ! function_exists( 'tch_raffle_get_settings' ) ) {
             $saved = array();
         }
         return wp_parse_args( $saved, array(
-            'campaign_slug'   => 'sa-day-els-2026',
-            'event_name'      => 'South African Day at Els Club',
-            'event_place'     => 'The Els Club, Dubai',
-            'event_date'      => '2026-10-31',
-            'open_time'       => '15:00',
-            'close_time'      => '21:00',
-            'live_draw_time'  => '21:15',
-            'ticket_prefix'   => 'TCH-',
-            'stage_engine'    => 'slot',
-            'operator_pin'    => '2026',
-            'prize_image_url' => '',
-            'headline'        => 'Win a Brand New Bike at South African Day!',
-            'subheadline'     => 'Complete the quick steps below before the timer hits zero to receive your instant Raffle Draw Ticket.',
-            'ig_url'          => 'https://www.instagram.com/thecyclehub/',
-            'ig_label'        => 'Follow our Instagram, take a selfie with the Bike, post it on Instagram and tag @thecyclehub',
-            'yt_url'          => 'https://www.youtube.com/@thecyclehub?sub_confirmation=1',
-            'yt_label'        => 'Follow and subscribe to our YouTube Channel',
-            'sender_email'    => 'marketing@thecyclehub.com',
-            'sender_name'     => 'The Cycle Hub',
-            'terms_content'   => '<ul><li>Participants must be attending South African Day at The Els Club on 31st October 2026.</li><li>Only one registration is permitted per email address and WhatsApp/Mobile number.</li><li>Participants must follow @thecyclehub on Instagram, post a selfie with the giveaway bike tagging @thecyclehub, and subscribe to The Cycle Hub YouTube channel.</li><li>Social actions will be verified during the live draw.</li><li>Registration closes strictly at 9:00 PM GST on 31st October 2026.</li></ul>',
+            'campaign_slug'    => 'sa-day-els-2026',
+            'event_name'       => 'South African Day at Els Club',
+            'event_place'      => 'The Els Club, Dubai',
+            'event_date'       => '2026-10-31',
+            'open_time'        => '15:00',
+            'close_time'       => '21:00',
+            'live_draw_date'   => '2026-10-31',
+            'live_draw_time'   => '21:15',
+            'ticket_prefix'    => 'TCH-',
+            'stage_engine'     => 'slot',
+            'operator_pin'     => '2026',
+            'team_entries_pin' => '1234',
+            'prize_image_url'  => '',
+            'headline'         => 'Win a Brand New Bike at South African Day!',
+            'subheadline'      => 'Complete the quick steps below before the timer hits zero to receive your instant Raffle Draw Ticket.',
+            'ig_url'           => 'https://www.instagram.com/thecyclehub/',
+            'ig_label'         => 'Follow our Instagram, take a selfie with the Bike, post it on Instagram and tag @thecyclehub',
+            'yt_url'           => 'https://www.youtube.com/@thecyclehub?sub_confirmation=1',
+            'yt_label'         => 'Follow and subscribe to our YouTube Channel',
+            'sender_email'     => 'marketing@thecyclehub.com',
+            'sender_name'      => 'The Cycle Hub',
+            'terms_content'    => '<ul><li>Participants must be attending South African Day at The Els Club on 31st October 2026.</li><li>Only one registration is permitted per email address and WhatsApp/Mobile number.</li><li>Participants must follow @thecyclehub on Instagram, post a selfie with the giveaway bike tagging @thecyclehub, and subscribe to The Cycle Hub YouTube channel.</li><li>Social actions will be verified during the live draw.</li><li>Registration closes strictly at 9:00 PM GST on 31st October 2026.</li></ul>',
         ) );
     }
 }
 
 /**
- * 3. Helpers for Live Broadcast State Sync (Spectator Mode)
+ * 3. Helpers for Live Broadcast State Sync
  */
 if ( ! function_exists( 'tch_raffle_get_live_state' ) ) {
     function tch_raffle_get_live_state() {
@@ -180,7 +176,7 @@ if ( ! function_exists( 'tch_raffle_get_live_state' ) ) {
             $state = array();
         }
         return wp_parse_args( $state, array(
-            'status'        => 'idle',
+            'status'        => 'idle', // idle, spinning, verifying, winner_confirmed, disqualified
             'engine'        => $s['stage_engine'],
             'spin_id'       => 0,
             'candidate'     => null,
