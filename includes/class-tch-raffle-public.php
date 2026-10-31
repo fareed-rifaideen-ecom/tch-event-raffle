@@ -63,18 +63,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
          */
         public function render_landing_shortcode() {
             global $wpdb;
-            $s            = tch_raffle_get_settings();
-            $times        = $this->get_schedule_timestamps( $s );
-            $table_name   = $wpdb->prefix . TCH_RAFFLE_TABLE;
-            $c_slug       = $s['campaign_slug'];
-            $stage_url    = home_url( '/?tch_live_stage=1' );
-            $quiz_enabled = ! empty( $s['quiz_enabled'] );
-            $quiz_options = tch_raffle_get_quiz_options_array( $s );
+            $s              = tch_raffle_get_settings();
+            $times          = $this->get_schedule_timestamps( $s );
+            $table_name     = $wpdb->prefix . TCH_RAFFLE_TABLE;
+            $c_slug         = $s['campaign_slug'];
+            $stage_url      = home_url( '/?tch_live_stage=1' );
+            $quiz_enabled   = ! empty( $s['quiz_enabled'] );
+            $quiz_options   = tch_raffle_get_quiz_options_array( $s );
+            $text_q_enabled = ! empty( $s['text_q_enabled'] );
 
             // Check if Official Winner is Confirmed for this Active Event
             $winners = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name, quiz_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
                     $c_slug
                 )
             );
@@ -90,18 +91,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             wp_enqueue_script( 'tch-raffle-frontend' );
 
             wp_localize_script( 'tch-raffle-frontend', 'tchRaffleData', array(
-                'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
-                'stageNonce'  => wp_create_nonce( 'tch_stage_nonce' ),
-                'nonce'       => wp_create_nonce( 'tch_raffle_submit_nonce' ),
-                'nowTs'       => $times['now'],
-                'openTs'      => $times['open'],
-                'closeTs'     => $times['close'],
-                'hasWinner'   => $has_winner,
-                'quizEnabled' => $quiz_enabled,
-                'stageUrl'    => $stage_url,
-                'eventName'   => $s['event_name'],
-                'eventDate'   => $formatted_date,
-                'drawLabel'   => $draw_full_label,
+                'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+                'stageNonce'   => wp_create_nonce( 'tch_stage_nonce' ),
+                'nonce'        => wp_create_nonce( 'tch_raffle_submit_nonce' ),
+                'nowTs'        => $times['now'],
+                'openTs'       => $times['open'],
+                'closeTs'      => $times['close'],
+                'hasWinner'    => $has_winner,
+                'quizEnabled'  => $quiz_enabled,
+                'textQEnabled' => $text_q_enabled,
+                'stageUrl'     => $stage_url,
+                'eventName'    => $s['event_name'],
+                'eventDate'    => $formatted_date,
+                'drawLabel'    => $draw_full_label,
             ) );
 
             ob_start();
@@ -175,14 +177,16 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
                             <div id="tch-fw-winners-list">
                                 <?php if ( $has_winner ) : ?>
-                                    <?php foreach ( $winners as $w ) : ?>
+                                    <?php foreach ( $winners as $w ) : 
+                                        $combined_ans = array_filter( array( $w->quiz_answer ?? '', $w->text_answer ?? '' ) );
+                                    ?>
                                         <div class="tch-fw-ticket-box">
                                             <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
                                             <div class="tch-fw-ref-code"><?php echo esc_html( $w->ref_code ); ?></div>
                                             <div class="tch-fw-winner-name">🎉 <?php echo esc_html( $w->full_name ); ?></div>
-                                            <?php if ( ! empty( $w->quiz_answer ) ) : ?>
+                                            <?php if ( ! empty( $combined_ans ) ) : ?>
                                                 <div style="margin-top:8px;font-size:12px;color:#86efac;font-weight:700;">
-                                                    ✅ Correct Answer: <?php echo esc_html( $w->quiz_answer ); ?>
+                                                    ✅ Answer: <?php echo esc_html( implode( ' • ', $combined_ans ) ); ?>
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -217,7 +221,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
                                         <div class="tch-form-header">
                                             <h2>Claim Your Raffle Ticket</h2>
-                                            <p>Enter your details, guess the tyre pressure & complete both steps</p>
+                                            <p>Enter your details, answer the challenge & complete both steps</p>
                                         </div>
 
                                         <form id="tch-raffle-form" novalidate>
@@ -242,21 +246,35 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                                 </div>
                                             </div>
 
-                                            <?php if ( $quiz_enabled && ! empty( $quiz_options ) ) : ?>
-                                                <!-- SKILL QUESTION BOX: Guess the Tyre Pressure? -->
+                                            <?php if ( ( $quiz_enabled && ! empty( $quiz_options ) ) || $text_q_enabled ) : ?>
+                                                <!-- SKILL CHALLENGE CARD (Dropdown & Open Text Input) -->
                                                 <div class="tch-quiz-card">
                                                     <div class="tch-quiz-badge">🚲 SKILL CHALLENGE — QUALIFY FOR THE DRAW</div>
-                                                    <label for="tch_quiz_answer" class="tch-quiz-label">
-                                                        <?php echo esc_html( $s['quiz_question'] ); ?> <span>*</span>
-                                                    </label>
-                                                    <div class="tch-select-wrap">
-                                                        <select id="tch_quiz_answer" name="quiz_answer" required>
-                                                            <option value="">— Select Your Answer —</option>
-                                                            <?php foreach ( $quiz_options as $opt ) : ?>
-                                                                <option value="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $opt ); ?></option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                    </div>
+
+                                                    <?php if ( $quiz_enabled && ! empty( $quiz_options ) ) : ?>
+                                                        <div class="tch-quiz-item">
+                                                            <label for="tch_quiz_answer" class="tch-quiz-label">
+                                                                <?php echo esc_html( $s['quiz_question'] ); ?> <span>*</span>
+                                                            </label>
+                                                            <div class="tch-select-wrap">
+                                                                <select id="tch_quiz_answer" name="quiz_answer" required>
+                                                                    <option value="">— Select Your Answer —</option>
+                                                                    <?php foreach ( $quiz_options as $opt ) : ?>
+                                                                        <option value="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $opt ); ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    <?php endif; ?>
+
+                                                    <?php if ( $text_q_enabled ) : ?>
+                                                        <div class="tch-quiz-item" style="<?php echo ( $quiz_enabled && ! empty( $quiz_options ) ) ? 'margin-top:12px;' : ''; ?>">
+                                                            <label for="tch_text_answer" class="tch-quiz-label">
+                                                                <?php echo esc_html( $s['text_q_question'] ); ?> <span>*</span>
+                                                            </label>
+                                                            <input type="text" id="tch_text_answer" name="text_answer" class="tch-text-q-input" placeholder="<?php echo esc_attr( $s['text_q_placeholder'] ); ?>" required>
+                                                        </div>
+                                                    <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
 
@@ -323,7 +341,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                                         <strong id="tch-ticket-name">-</strong>
                                                     </div>
                                                     <div>
-                                                        <small>YOUR ANSWER</small>
+                                                        <small>SUBMITTED ANSWER</small>
                                                         <strong id="tch-ticket-answer" style="color:#facc15;">-</strong>
                                                     </div>
                                                 </div>
@@ -405,6 +423,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             $raw_phone    = sanitize_text_field( wp_unslash( $_POST['phone'] ?? '' ) );
             $phone        = preg_replace( '/[^0-9\+]/', '', $raw_phone );
             $quiz_answer  = sanitize_text_field( wp_unslash( $_POST['quiz_answer'] ?? '' ) );
+            $text_answer  = sanitize_text_field( wp_unslash( $_POST['text_answer'] ?? '' ) );
             $ig_confirmed = ! empty( $_POST['ig_confirmed'] ) ? 1 : 0;
             $yt_confirmed = ! empty( $_POST['yt_confirmed'] ) ? 1 : 0;
 
@@ -413,7 +432,11 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             }
 
             if ( ! empty( $s['quiz_enabled'] ) && empty( $quiz_answer ) ) {
-                wp_send_json_error( array( 'message' => 'Please select your answer for "' . $s['quiz_question'] . '".' ) );
+                wp_send_json_error( array( 'message' => 'Please select an answer for "' . $s['quiz_question'] . '".' ) );
+            }
+
+            if ( ! empty( $s['text_q_enabled'] ) && '' === trim( $text_answer ) ) {
+                wp_send_json_error( array( 'message' => 'Please enter your answer for "' . $s['text_q_question'] . '".' ) );
             }
 
             if ( ! $ig_confirmed || ! $yt_confirmed ) {
@@ -422,7 +445,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
             $existing = $wpdb->get_row(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name, quiz_answer FROM `$table_name` WHERE campaign_slug = %s AND (email = %s OR phone = %s) LIMIT 1",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer FROM `$table_name` WHERE campaign_slug = %s AND (email = %s OR phone = %s) LIMIT 1",
                     $c_slug,
                     $email,
                     $phone
@@ -430,12 +453,15 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             );
 
             if ( $existing ) {
+                $combined_existing = implode( ' • ', array_filter( array( $existing->quiz_answer ?: $quiz_answer, $existing->text_answer ?: $text_answer ) ) );
                 wp_send_json_success( array(
-                    'ref_code'    => $existing->ref_code,
-                    'full_name'   => $existing->full_name,
-                    'quiz_answer' => $existing->quiz_answer ?: $quiz_answer,
-                    'existing'    => true,
-                    'message'     => 'You are already registered for this event! Here is your Raffle Ticket.',
+                    'ref_code'       => $existing->ref_code,
+                    'full_name'      => $existing->full_name,
+                    'quiz_answer'    => $existing->quiz_answer ?: $quiz_answer,
+                    'text_answer'    => $existing->text_answer ?: $text_answer,
+                    'answer_summary' => $combined_existing ?: 'Confirmed',
+                    'existing'       => true,
+                    'message'        => 'You are already registered for this event! Here is your Raffle Ticket.',
                 ) );
             }
 
@@ -451,26 +477,32 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                     'email'         => $email,
                     'phone'         => $phone,
                     'quiz_answer'   => $quiz_answer,
+                    'text_answer'   => $text_answer,
+                    'manual_status' => 'auto',
                     'ig_confirmed'  => 1,
                     'yt_confirmed'  => 1,
                     'status'        => 'valid',
                     'ip_address'    => sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' ),
                     'created_at'    => current_time( 'mysql' ),
                 ),
-                array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
+                array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
             );
 
             if ( ! $inserted ) {
                 wp_send_json_error( array( 'message' => 'Could not save your registration. Please try again.' ) );
             }
 
-            $this->send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $s );
+            $this->send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $text_answer, $s );
+
+            $combined_ans = implode( ' • ', array_filter( array( $quiz_answer, $text_answer ) ) );
 
             wp_send_json_success( array(
-                'ref_code'    => $ref_code,
-                'full_name'   => $full_name,
-                'quiz_answer' => $quiz_answer,
-                'existing'    => false,
+                'ref_code'       => $ref_code,
+                'full_name'      => $full_name,
+                'quiz_answer'    => $quiz_answer,
+                'text_answer'    => $text_answer,
+                'answer_summary' => $combined_ans ?: 'Confirmed',
+                'existing'       => false,
             ) );
         }
 
@@ -492,7 +524,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
             $row = $wpdb->get_row(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name, quiz_answer, status FROM `$table_name` WHERE campaign_slug = %s AND (ref_code = %s OR email = %s) LIMIT 1",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer, manual_status, status FROM `$table_name` WHERE campaign_slug = %s AND (ref_code = %s OR email = %s) LIMIT 1",
                     $c_slug,
                     strtoupper( $query ),
                     $query
@@ -503,20 +535,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                 wp_send_json_error( array( 'message' => 'No ticket found matching "' . esc_html( $query ) . '" for ' . esc_html( $s['event_name'] ) . '.' ) );
             }
 
-            // Check if draw has already finished
-            $has_winner = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) ) > 0;
-            $ans_text   = ! empty( $row->quiz_answer ) ? ' (Answer: ' . $row->quiz_answer . ')' : '';
+            $has_winner   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) ) > 0;
+            $combined_ans = implode( ' • ', array_filter( array( $row->quiz_answer ?? '', $row->text_answer ?? '' ) ) );
+            $ans_text     = ! empty( $combined_ans ) ? ' (Answer: ' . $combined_ans . ')' : '';
 
             if ( 'winner' === $row->status ) {
                 $status_label = '🏆 CONGRATULATIONS! OFFICIAL WINNER!' . $ans_text;
-            } elseif ( 'disqualified' === $row->status ) {
-                $status_label = '❌ Disqualified during social verification' . $ans_text;
-            } elseif ( $has_winner && ! empty( $s['quiz_enabled'] ) ) {
-                // Only reveal whether their tyre pressure guess was right or wrong AFTER the winner is drawn
-                $is_corr      = tch_raffle_is_answer_correct( $row->quiz_answer, $s );
-                $status_label = $is_corr
-                    ? '✅ Qualified with Correct Answer' . $ans_text
-                    : '❌ Did Not Qualify — Correct Answer was ' . $s['quiz_correct'] . $ans_text;
+            } elseif ( 'disqualified' === $row->status || 'disqualified' === ( $row->manual_status ?? 'auto' ) ) {
+                $status_label = '❌ Not Qualified / Disqualified' . $ans_text;
+            } elseif ( $has_winner ) {
+                $is_qual      = tch_raffle_is_entry_qualified( $row, $s );
+                $status_label = $is_qual
+                    ? '✅ Qualified in Final Draw Pool' . $ans_text
+                    : '❌ Did Not Qualify for Final Draw' . $ans_text;
             } else {
                 $status_label = '🎟️ Registered' . $ans_text;
             }
@@ -554,7 +585,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
         /**
          * Dispatch HTML Email Scoped to marketing@thecyclehub.com
          */
-        private function send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $s ) {
+        private function send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $text_answer, $s ) {
             $sender_email = ! empty( $s['sender_email'] ) ? $s['sender_email'] : 'marketing@thecyclehub.com';
             $sender_name  = ! empty( $s['sender_name'] ) ? $s['sender_name'] : 'The Cycle Hub';
 
@@ -573,12 +604,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             $formatted_draw_time = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
             $stage_url           = home_url( '/?tch_live_stage=1' );
 
-            $quiz_row_html = '';
+            $extra_rows_html = '';
             if ( ! empty( $quiz_answer ) ) {
-                $quiz_row_html = '
+                $extra_rows_html .= '
                 <tr>
                     <td style="padding:6px 0;color:#94a3b8;">🚲 ' . esc_html( $s['quiz_question'] ) . '</td>
                     <td style="padding:6px 0;text-align:right;font-weight:700;color:#facc15;">' . esc_html( $quiz_answer ) . '</td>
+                </tr>';
+            }
+            if ( ! empty( $text_answer ) ) {
+                $extra_rows_html .= '
+                <tr>
+                    <td style="padding:6px 0;color:#94a3b8;">✍️ ' . esc_html( $s['text_q_question'] ) . '</td>
+                    <td style="padding:6px 0;text-align:right;font-weight:700;color:#38bdf8;">' . esc_html( $text_answer ) . '</td>
                 </tr>';
             }
 
@@ -604,7 +642,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                 <td style="padding:6px 0;color:#94a3b8;">📅 Event Date:</td>
                                 <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $formatted_date ) . '</td>
                             </tr>
-                            ' . $quiz_row_html . '
+                            ' . $extra_rows_html . '
                             <tr>
                                 <td style="padding:6px 0;color:#94a3b8;">⏰ Live Draw Schedule:</td>
                                 <td style="padding:6px 0;text-align:right;font-weight:600;color:#eab308;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
