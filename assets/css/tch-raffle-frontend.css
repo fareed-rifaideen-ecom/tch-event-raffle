@@ -996,3 +996,33 @@
         font-size: 16px !important;
     }
 }
+
+/* ==========================================================================
+   v2.3 Additions: Open Text Question Input Styling
+   ========================================================================== */
+
+.tch-text-q-input {
+    width: 100%;
+    background-color: #0b0f19 !important;
+    border: 1px solid #475569 !important;
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    height: 42px !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    transition: border-color 0.2s;
+}
+
+.tch-text-q-input:focus {
+    border-color: var(--tch-gold) !important;
+    outline: none !important;
+}
+
+@media (max-width: 640px) {
+    .tch-text-q-input {
+        font-size: 16px !important;
+    }
+}
