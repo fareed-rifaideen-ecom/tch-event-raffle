@@ -91,32 +91,36 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 $dr_date  = sanitize_text_field( wp_unslash( $_POST['live_draw_date'] ?? $ev_date ) );
 
                 $settings = array(
-                    'campaign_slug'    => $slug,
-                    'event_name'       => sanitize_text_field( wp_unslash( $_POST['event_name'] ?? '' ) ),
-                    'event_place'      => sanitize_text_field( wp_unslash( $_POST['event_place'] ?? '' ) ),
-                    'event_date'       => $ev_date,
-                    'open_time'        => sanitize_text_field( wp_unslash( $_POST['open_time'] ?? '' ) ),
-                    'close_time'       => sanitize_text_field( wp_unslash( $_POST['close_time'] ?? '' ) ),
-                    'live_draw_date'   => $dr_date,
-                    'live_draw_time'   => sanitize_text_field( wp_unslash( $_POST['live_draw_time'] ?? '' ) ),
-                    'ticket_prefix'    => sanitize_text_field( wp_unslash( $_POST['ticket_prefix'] ?? 'TCH-' ) ),
-                    'stage_engine'     => $engine,
-                    'operator_pin'     => $op_pin,
-                    'team_entries_pin' => $team_pin,
-                    'quiz_enabled'     => ! empty( $_POST['quiz_enabled'] ) ? 1 : 0,
-                    'quiz_question'    => sanitize_text_field( wp_unslash( $_POST['quiz_question'] ?? 'Guess the Tyre Pressure?' ) ),
-                    'quiz_options'     => sanitize_textarea_field( wp_unslash( $_POST['quiz_options'] ?? '' ) ),
-                    'quiz_correct'     => sanitize_text_field( wp_unslash( $_POST['quiz_correct'] ?? '' ) ),
-                    'prize_image_url'  => esc_url_raw( wp_unslash( $_POST['prize_image_url'] ?? '' ) ),
-                    'headline'         => sanitize_text_field( wp_unslash( $_POST['headline'] ?? '' ) ),
-                    'subheadline'      => sanitize_textarea_field( wp_unslash( $_POST['subheadline'] ?? '' ) ),
-                    'ig_url'           => esc_url_raw( wp_unslash( $_POST['ig_url'] ?? '' ) ),
-                    'ig_label'         => sanitize_text_field( wp_unslash( $_POST['ig_label'] ?? '' ) ),
-                    'yt_url'           => esc_url_raw( wp_unslash( $_POST['yt_url'] ?? '' ) ),
-                    'yt_label'         => sanitize_text_field( wp_unslash( $_POST['yt_label'] ?? '' ) ),
-                    'sender_email'     => sanitize_email( wp_unslash( $_POST['sender_email'] ?? 'marketing@thecyclehub.com' ) ),
-                    'sender_name'      => sanitize_text_field( wp_unslash( $_POST['sender_name'] ?? 'The Cycle Hub' ) ),
-                    'terms_content'    => wp_kses_post( wp_unslash( $_POST['terms_content'] ?? '' ) ),
+                    'campaign_slug'      => $slug,
+                    'event_name'         => sanitize_text_field( wp_unslash( $_POST['event_name'] ?? '' ) ),
+                    'event_place'        => sanitize_text_field( wp_unslash( $_POST['event_place'] ?? '' ) ),
+                    'event_date'         => $ev_date,
+                    'open_time'          => sanitize_text_field( wp_unslash( $_POST['open_time'] ?? '' ) ),
+                    'close_time'         => sanitize_text_field( wp_unslash( $_POST['close_time'] ?? '' ) ),
+                    'live_draw_date'     => $dr_date,
+                    'live_draw_time'     => sanitize_text_field( wp_unslash( $_POST['live_draw_time'] ?? '' ) ),
+                    'ticket_prefix'      => sanitize_text_field( wp_unslash( $_POST['ticket_prefix'] ?? 'TCH-' ) ),
+                    'stage_engine'       => $engine,
+                    'operator_pin'       => $op_pin,
+                    'team_entries_pin'   => $team_pin,
+                    'quiz_enabled'       => ! empty( $_POST['quiz_enabled'] ) ? 1 : 0,
+                    'quiz_question'      => sanitize_text_field( wp_unslash( $_POST['quiz_question'] ?? 'Guess the Tyre Pressure?' ) ),
+                    'quiz_options'       => sanitize_textarea_field( wp_unslash( $_POST['quiz_options'] ?? '' ) ),
+                    'quiz_correct'       => sanitize_text_field( wp_unslash( $_POST['quiz_correct'] ?? '' ) ),
+                    'text_q_enabled'     => ! empty( $_POST['text_q_enabled'] ) ? 1 : 0,
+                    'text_q_question'    => sanitize_text_field( wp_unslash( $_POST['text_q_question'] ?? '' ) ),
+                    'text_q_placeholder' => sanitize_text_field( wp_unslash( $_POST['text_q_placeholder'] ?? '' ) ),
+                    'text_q_keyword'     => sanitize_text_field( wp_unslash( $_POST['text_q_keyword'] ?? '' ) ),
+                    'prize_image_url'    => esc_url_raw( wp_unslash( $_POST['prize_image_url'] ?? '' ) ),
+                    'headline'           => sanitize_text_field( wp_unslash( $_POST['headline'] ?? '' ) ),
+                    'subheadline'        => sanitize_textarea_field( wp_unslash( $_POST['subheadline'] ?? '' ) ),
+                    'ig_url'             => esc_url_raw( wp_unslash( $_POST['ig_url'] ?? '' ) ),
+                    'ig_label'           => sanitize_text_field( wp_unslash( $_POST['ig_label'] ?? '' ) ),
+                    'yt_url'             => esc_url_raw( wp_unslash( $_POST['yt_url'] ?? '' ) ),
+                    'yt_label'           => sanitize_text_field( wp_unslash( $_POST['yt_label'] ?? '' ) ),
+                    'sender_email'       => sanitize_email( wp_unslash( $_POST['sender_email'] ?? 'marketing@thecyclehub.com' ) ),
+                    'sender_name'        => sanitize_text_field( wp_unslash( $_POST['sender_name'] ?? 'The Cycle Hub' ) ),
+                    'terms_content'      => wp_kses_post( wp_unslash( $_POST['terms_content'] ?? '' ) ),
                 );
 
                 update_option( 'tch_raffle_settings', $settings );
@@ -168,7 +172,51 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 exit;
             }
 
-            // 3. Export CSV
+            // 3. Single Entry Qualification / Disqualification Toggle from WP Admin
+            if ( isset( $_GET['action'], $_GET['entry_id'] ) && in_array( $_GET['action'], array( 'qualify_entry', 'disqualify_entry', 'auto_entry' ), true ) && check_admin_referer( 'tch_mod_entry_nonce' ) ) {
+                global $wpdb;
+                $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
+                $entry_id   = absint( $_GET['entry_id'] );
+                $act        = sanitize_key( $_GET['action'] );
+
+                if ( 'qualify_entry' === $act ) {
+                    $wpdb->update( $table_name, array( 'manual_status' => 'qualified', 'status' => 'valid' ), array( 'id' => $entry_id ), array( '%s', '%s' ), array( '%d' ) );
+                } elseif ( 'disqualify_entry' === $act ) {
+                    $wpdb->update( $table_name, array( 'manual_status' => 'disqualified', 'status' => 'disqualified' ), array( 'id' => $entry_id ), array( '%s', '%s' ), array( '%d' ) );
+                } elseif ( 'auto_entry' === $act ) {
+                    $wpdb->update( $table_name, array( 'manual_status' => 'auto', 'status' => 'valid' ), array( 'id' => $entry_id ), array( '%s', '%s' ), array( '%d' ) );
+                }
+
+                $redirect = remove_query_arg( array( 'action', 'entry_id', '_wpnonce', 'deleted', 'mod_updated' ) );
+                wp_safe_redirect( add_query_arg( 'mod_updated', '1', $redirect ) );
+                exit;
+            }
+
+            // 4. Bulk Qualify / Bulk Disqualify Selected Entries from WP Admin
+            if ( isset( $_POST['tch_bulk_action_submit'], $_POST['tch_bulk_action'] ) && ! empty( $_POST['entry_ids'] ) && is_array( $_POST['entry_ids'] ) && check_admin_referer( 'tch_bulk_entries_nonce' ) ) {
+                global $wpdb;
+                $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
+                $bulk_act   = sanitize_key( wp_unslash( $_POST['tch_bulk_action'] ) );
+                $ids        = array_map( 'absint', $_POST['entry_ids'] );
+                $ids        = array_filter( $ids );
+
+                if ( ! empty( $ids ) ) {
+                    $id_list = implode( ',', $ids );
+                    if ( 'qualify' === $bulk_act ) {
+                        $wpdb->query( "UPDATE `$table_name` SET manual_status = 'qualified', status = 'valid' WHERE id IN ($id_list)" );
+                    } elseif ( 'disqualify' === $bulk_act ) {
+                        $wpdb->query( "UPDATE `$table_name` SET manual_status = 'disqualified', status = 'disqualified' WHERE id IN ($id_list)" );
+                    } elseif ( 'delete' === $bulk_act ) {
+                        $wpdb->query( "DELETE FROM `$table_name` WHERE id IN ($id_list)" );
+                    }
+                }
+
+                $redirect = remove_query_arg( array( 'action', 'entry_id', '_wpnonce', 'deleted' ) );
+                wp_safe_redirect( add_query_arg( 'mod_updated', '1', $redirect ) );
+                exit;
+            }
+
+            // 5. Export CSV
             if ( isset( $_GET['action'] ) && 'tch_export_csv' === $_GET['action'] && check_admin_referer( 'tch_export_csv_nonce' ) ) {
                 global $wpdb;
                 $s           = tch_raffle_get_settings();
@@ -187,12 +235,11 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 header( 'Content-Disposition: attachment; filename=' . $fname );
                 $output = fopen( 'php://output', 'w' );
 
-                fputcsv( $output, array( 'ID', 'Event Campaign', 'Ticket Reference', 'Full Name', 'Email', 'Mobile / WhatsApp', 'Quiz Answer', 'Quiz Qualified', 'Status', 'IP Address', 'Registered At (GST)' ) );
+                fputcsv( $output, array( 'ID', 'Event Campaign', 'Ticket Reference', 'Full Name', 'Email', 'Mobile / WhatsApp', 'Dropdown Answer', 'Text Input Answer', 'Qualified for Draw', 'Operator Review', 'Status', 'IP Address', 'Registered At (GST)' ) );
 
                 if ( ! empty( $entries ) ) {
                     foreach ( $entries as $row ) {
-                        $ans     = $row['quiz_answer'] ?? '';
-                        $is_qual = tch_raffle_is_answer_correct( $ans, $s ) ? 'YES (Correct)' : 'NO (Wrong)';
+                        $is_qual = tch_raffle_is_entry_qualified( $row, $s ) ? 'YES (Qualified)' : 'NO (Not Qualified)';
                         fputcsv( $output, array(
                             $row['id'],
                             $row['campaign_slug'],
@@ -200,8 +247,10 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                             $row['full_name'],
                             $row['email'],
                             $row['phone'],
-                            $ans,
+                            $row['quiz_answer'] ?? '',
+                            $row['text_answer'] ?? '',
                             $is_qual,
+                            $row['manual_status'] ?? 'auto',
                             $row['status'],
                             $row['ip_address'],
                             $row['created_at'],
@@ -212,7 +261,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 exit;
             }
 
-            // 4. Delete Single Entry
+            // 6. Delete Single Entry
             if ( isset( $_GET['action'] ) && 'delete_entry' === $_GET['action'] && ! empty( $_GET['entry_id'] ) && check_admin_referer( 'tch_delete_entry_nonce' ) ) {
                 global $wpdb;
                 $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
@@ -232,11 +281,11 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             <div class="wrap">
                 <h1 style="display:flex;align-items:center;gap:10px;">
                     <span class="dashicons dashicons-tickets-alt" style="font-size:28px;width:28px;height:28px;"></span>
-                    TCH Event Raffle v2.2 — Settings, Skill Quiz & Stage Engines
+                    TCH Event Raffle v2.3 — Settings, Questions & Stage Engines
                 </h1>
 
                 <?php if ( isset( $_GET['updated'] ) ) : ?>
-                    <div class="notice notice-success is-dismissible"><p><strong>Settings saved!</strong> Your Landing Page, Skill Question, Live Stage, and Team Portal have been updated.</p></div>
+                    <div class="notice notice-success is-dismissible"><p><strong>Settings saved!</strong> Your Landing Page, Qualification Questions, Live Stage, and Team Portal have been updated.</p></div>
                 <?php endif; ?>
 
                 <?php if ( isset( $_GET['archived'] ) ) : ?>
@@ -334,37 +383,71 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                             </table>
                         </div>
 
-                        <!-- CARD 2: Skill Question / Guess the Tyre Pressure Qualifier -->
+                        <!-- CARD 2: Qualification Questions (Multiple Choice Dropdown + Open Text Field) -->
                         <div style="background:#fff;padding:20px;border:2px solid #eab308;border-radius:6px;">
-                            <h2 style="margin-top:0;border-bottom:1px solid #eee;padding-bottom:10px;">2. Skill Question Qualifier (Guess the Tyre Pressure)</h2>
+                            <h2 style="margin-top:0;border-bottom:1px solid #eee;padding-bottom:10px;">2. Qualification Questions (Dropdown & Text Input)</h2>
                             <table class="form-table" role="presentation">
                                 <tr>
-                                    <th><label>Enable Question Box</label></th>
+                                    <th colspan="2" style="padding:8px 0;"><strong style="color:#b45309;font-size:14px;">A. Multiple-Choice Dropdown Question</strong></th>
+                                </tr>
+                                <tr>
+                                    <th><label>Enable Dropdown Box</label></th>
                                     <td>
                                         <label>
                                             <input type="checkbox" name="quiz_enabled" value="1" <?php checked( ! empty( $s['quiz_enabled'] ) ); ?>>
-                                            <strong>Require participants to answer this question & filter Live Draw by the Correct Answer</strong>
+                                            <strong>Show Multiple-Choice Dropdown on Registration Form</strong>
                                         </label>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th><label>Question Title</label></th>
+                                    <th><label>Dropdown Question Title</label></th>
                                     <td>
                                         <input type="text" name="quiz_question" value="<?php echo esc_attr( $s['quiz_question'] ); ?>" class="large-text" placeholder="Guess the Tyre Pressure?">
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th><label>Dropdown Options (5 or 6 Answers)</label></th>
+                                    <th><label>Dropdown Options</label></th>
                                     <td>
-                                        <textarea name="quiz_options" rows="6" class="large-text" style="font-family:monospace;"><?php echo esc_textarea( $s['quiz_options'] ); ?></textarea>
-                                        <p class="description">Enter one option per line (e.g. <code>45 PSI</code>, <code>55 PSI</code>, <code>65 PSI</code>...).</p>
+                                        <textarea name="quiz_options" rows="4" class="large-text" style="font-family:monospace;"><?php echo esc_textarea( $s['quiz_options'] ); ?></textarea>
+                                        <p class="description">One option per line (e.g. <code>45 PSI</code>, <code>55 PSI</code>, <code>65 PSI</code>).</p>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th><label>Correct Winning Answer</label></th>
+                                    <th><label>Correct Dropdown Answer</label></th>
                                     <td>
                                         <input type="text" name="quiz_correct" value="<?php echo esc_attr( $s['quiz_correct'] ); ?>" class="regular-text" style="border:2px solid #16a34a;font-weight:700;">
-                                        <p class="description"><strong>Important:</strong> Must match one of the options above exactly (e.g. <code>65 PSI</code>). Only participants who select this answer will qualify into the Live Draw pool!</p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th colspan="2" style="padding:14px 0 6px;border-top:1px solid #eee;"><strong style="color:#0369a1;font-size:14px;">B. Custom Open Text Question (Manual / Keyword Qualification)</strong></th>
+                                </tr>
+                                <tr>
+                                    <th><label>Enable Open Text Field</label></th>
+                                    <td>
+                                        <label>
+                                            <input type="checkbox" name="text_q_enabled" value="1" <?php checked( ! empty( $s['text_q_enabled'] ) ); ?>>
+                                            <strong>Show Open Text Input Question on Registration Form</strong>
+                                        </label>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th><label>Text Question Label</label></th>
+                                    <td>
+                                        <input type="text" name="text_q_question" value="<?php echo esc_attr( $s['text_q_question'] ); ?>" class="large-text" placeholder="e.g. Guess the exact weight of the bike?">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th><label>Input Placeholder</label></th>
+                                    <td>
+                                        <input type="text" name="text_q_placeholder" value="<?php echo esc_attr( $s['text_q_placeholder'] ); ?>" class="large-text" placeholder="e.g. Type your answer here...">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th><label>Optional Auto-Match Keyword</label></th>
+                                    <td>
+                                        <input type="text" name="text_q_keyword" value="<?php echo esc_attr( $s['text_q_keyword'] ); ?>" class="regular-text" placeholder="Leave blank for manual review">
+                                        <p class="description">If set (e.g. <code>7.2</code>), answers containing this text auto-qualify. Regardless of this setting, <strong>Operators can manually click Qualify or Disqualify</strong> on any entry in Entries & Archives or the Team Portal!</p>
                                     </td>
                                 </tr>
                             </table>
@@ -504,7 +587,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
         }
 
         /**
-         * Render Registered Participants Table with Quiz Answer & Qualification Badge
+         * Render Registered Participants Table with Operator Qualify/Disqualify Controls
          */
         public function render_entries_page() {
             global $wpdb;
@@ -531,8 +614,8 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
 
             if ( ! empty( $search ) ) {
                 $like            = '%' . $wpdb->esc_like( $search ) . '%';
-                $where_clauses[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR quiz_answer LIKE %s)';
-                array_push( $prepare_args, $like, $like, $like, $like, $like );
+                $where_clauses[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR quiz_answer LIKE %s OR text_answer LIKE %s)';
+                array_push( $prepare_args, $like, $like, $like, $like, $like, $like );
             }
 
             $where_sql = ! empty( $where_clauses ) ? 'WHERE ' . implode( ' AND ', $where_clauses ) : '';
@@ -556,16 +639,13 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             );
             ?>
             <div class="wrap">
-                <h1 class="wp-heading-inline">Raffle Registrations & Event Archives (<?php echo count( $entries ); ?> Shown)</h1>
+                <h1 class="wp-heading-inline">Raffle Registrations & Operator Qualification (<?php echo count( $entries ); ?> Shown)</h1>
                 <a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action">📥 Export Current View to CSV</a>
                 <a href="<?php echo esc_url( home_url( '/?tch_team_entries=1' ) ); ?>" target="_blank" class="page-title-action">📋 Open Frontend Team Entries Portal ↗</a>
                 <hr class="wp-header-end">
 
-                <?php if ( ! empty( $s['quiz_enabled'] ) ) : ?>
-                    <div style="background:#f0f6fc;border-left:4px solid #2271b1;padding:10px 14px;margin:12px 0;">
-                        <strong>Active Skill Question:</strong> <?php echo esc_html( $s['quiz_question'] ); ?> —
-                        <strong>Winning Answer Required to Qualify:</strong> <code style="background:#dcfce7;color:#166534;font-weight:700;padding:2px 8px;border-radius:4px;"><?php echo esc_html( $s['quiz_correct'] ); ?></code>
-                    </div>
+                <?php if ( isset( $_GET['mod_updated'] ) ) : ?>
+                    <div class="notice notice-success is-dismissible"><p><strong>Qualification status updated!</strong> The Live Stage draw pool has been updated immediately.</p></div>
                 <?php endif; ?>
 
                 <form method="get" style="margin:15px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
@@ -581,69 +661,90 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                         <option value="ALL" <?php selected( $campaign_filter, 'ALL' ); ?>>— Show All Events Combined —</option>
                     </select>
 
-                    <input type="search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="Search Ticket ID, Name, Email, Phone, Answer..." style="min-width:260px;">
+                    <input type="search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="Search Ticket, Name, Email, Phone, or Answer..." style="min-width:280px;">
                     <button type="submit" class="button">Filter / Search</button>
                     <?php if ( ! empty( $search ) ) : ?>
                         <a href="<?php echo esc_url( admin_url( 'admin.php?page=tch-raffle-entries&campaign_filter=' . rawurlencode( $campaign_filter ) ) ); ?>" class="button">Reset Search</a>
                     <?php endif; ?>
                 </form>
 
-                <table class="wp-list-table widefat fixed striped">
-                    <thead>
-                        <tr>
-                            <th style="width:120px;">Ticket Ref ID</th>
-                            <th>Full Name</th>
-                            <th>Email</th>
-                            <th>Mobile / WhatsApp</th>
-                            <th style="width:170px;">Tyre Pressure Answer</th>
-                            <th style="width:130px;">Event Campaign</th>
-                            <th style="width:100px;">Status</th>
-                            <th style="width:150px;">Registered At</th>
-                            <th style="width:70px;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if ( empty( $entries ) ) : ?>
-                            <tr><td colspan="9">No raffle entries found for this filter.</td></tr>
-                        <?php else : ?>
-                            <?php foreach ( $entries as $row ) : 
-                                $del_url  = wp_nonce_url( admin_url( 'admin.php?page=tch-raffle-entries&action=delete_entry&entry_id=' . $row->id ), 'tch_delete_entry_nonce' );
-                                $badge_bg = 'winner' === $row->status ? '#16a34a' : ( 'disqualified' === $row->status ? '#dc2626' : '#475569' );
-                                $ans      = isset( $row->quiz_answer ) ? $row->quiz_answer : '';
-                                $is_corr  = tch_raffle_is_answer_correct( $ans, $s );
-                            ?>
-                                <tr>
-                                    <td><strong style="background:#1d2327;color:#facc15;padding:3px 8px;border-radius:4px;font-family:monospace;"><?php echo esc_html( $row->ref_code ); ?></strong></td>
-                                    <td><strong><?php echo esc_html( $row->full_name ); ?></strong></td>
-                                    <td><a href="mailto:<?php echo esc_attr( $row->email ); ?>"><?php echo esc_html( $row->email ); ?></a></td>
-                                    <td><a href="https://wa.me/<?php echo esc_attr( preg_replace( '/[^0-9]/', '', $row->phone ) ); ?>" target="_blank"><?php echo esc_html( $row->phone ); ?></a></td>
-                                    <td>
-                                        <?php if ( '' !== $ans ) : ?>
-                                            <strong><?php echo esc_html( $ans ); ?></strong>
-                                            <?php if ( $is_corr ) : ?>
-                                                <span style="color:#16a34a;font-weight:700;margin-left:4px;">✅ Qualified</span>
+                <!-- Bulk Qualification Form -->
+                <form method="post">
+                    <?php wp_nonce_field( 'tch_bulk_entries_nonce' ); ?>
+                    <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+                        <select name="tch_bulk_action">
+                            <option value="">— Bulk Operator Actions —</option>
+                            <option value="qualify">✅ Qualify Selected for Draw</option>
+                            <option value="disqualify">❌ Disqualify Selected</option>
+                            <option value="delete">🗑️ Delete Selected</option>
+                        </select>
+                        <button type="submit" name="tch_bulk_action_submit" class="button action">Apply to Selected</button>
+                    </div>
+
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <td class="manage-column column-cb check-column"><input type="checkbox" onclick="jQuery('.tch-row-cb').prop('checked', this.checked);"></td>
+                                <th style="width:115px;">Ticket Ref ID</th>
+                                <th>Participant</th>
+                                <th style="width:140px;">Dropdown Answer</th>
+                                <th style="width:190px;">Text Input Answer</th>
+                                <th style="width:140px;">Draw Qualification</th>
+                                <th style="width:185px;">Operator Action (Qualify/DQ)</th>
+                                <th style="width:135px;">Registered At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ( empty( $entries ) ) : ?>
+                                <tr><td colspan="8">No raffle entries found for this filter.</td></tr>
+                            <?php else : ?>
+                                <?php foreach ( $entries as $row ) : 
+                                    $qual_url = wp_nonce_url( add_query_arg( array( 'action' => 'qualify_entry', 'entry_id' => $row->id ) ), 'tch_mod_entry_nonce' );
+                                    $dq_url   = wp_nonce_url( add_query_arg( array( 'action' => 'disqualify_entry', 'entry_id' => $row->id ) ), 'tch_mod_entry_nonce' );
+                                    $del_url  = wp_nonce_url( admin_url( 'admin.php?page=tch-raffle-entries&action=delete_entry&entry_id=' . $row->id ), 'tch_delete_entry_nonce' );
+
+                                    $is_qual  = tch_raffle_is_entry_qualified( $row, $s );
+                                    $man_stat = $row->manual_status ?? 'auto';
+                                ?>
+                                    <tr>
+                                        <th scope="row" class="check-column"><input type="checkbox" name="entry_ids[]" value="<?php echo esc_attr( $row->id ); ?>" class="tch-row-cb"></th>
+                                        <td><strong style="background:#1d2327;color:#facc15;padding:3px 8px;border-radius:4px;font-family:monospace;"><?php echo esc_html( $row->ref_code ); ?></strong></td>
+                                        <td>
+                                            <strong><?php echo esc_html( $row->full_name ); ?></strong><br>
+                                            <small><a href="https://wa.me/<?php echo esc_attr( preg_replace( '/[^0-9]/', '', $row->phone ) ); ?>" target="_blank"><?php echo esc_html( $row->phone ); ?></a> • <?php echo esc_html( $row->email ); ?></small>
+                                        </td>
+                                        <td><strong><?php echo esc_html( $row->quiz_answer ?: '-' ); ?></strong></td>
+                                        <td><div style="background:#f8fafc;border:1px solid #cbd5e1;padding:4px 8px;border-radius:4px;font-weight:600;"><?php echo esc_html( $row->text_answer ?: '-' ); ?></div></td>
+                                        <td>
+                                            <?php if ( 'winner' === $row->status ) : ?>
+                                                <span style="background:#16a34a;color:#fff;padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;">🏆 WINNER</span>
+                                            <?php elseif ( $is_qual ) : ?>
+                                                <span style="background:#dcfce7;color:#166534;border:1px solid #86efac;padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;">✅ QUALIFIED</span>
+                                                <?php if ( 'qualified' === $man_stat ) : ?><br><small style="color:#16a34a;">(Manual Override)</small><?php endif; ?>
                                             <?php else : ?>
-                                                <span style="color:#dc2626;font-size:12px;margin-left:4px;">❌ Wrong</span>
+                                                <span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;">❌ NOT QUALIFIED</span>
                                             <?php endif; ?>
-                                        <?php else : ?>
-                                            <span style="color:#94a3b8;">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><code><?php echo esc_html( $row->campaign_slug ); ?></code></td>
-                                    <td><span style="background:<?php echo esc_attr( $badge_bg ); ?>;color:#fff;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;"><?php echo esc_html( strtoupper( $row->status ) ); ?></span></td>
-                                    <td><?php echo esc_html( $row->created_at ); ?></td>
-                                    <td><a href="<?php echo esc_url( $del_url ); ?>" style="color:#d63638;" onclick="return confirm('Delete this participant?');">Delete</a></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                                                <a href="<?php echo esc_url( $qual_url ); ?>" class="button button-small" style="border-color:#16a34a;color:#166534;background:#f0fdf4;">✅ Qualify</a>
+                                                <a href="<?php echo esc_url( $dq_url ); ?>" class="button button-small" style="border-color:#dc2626;color:#991b1b;background:#fef2f2;">❌ DQ</a>
+                                                <a href="<?php echo esc_url( $del_url ); ?>" class="button button-small" style="color:#64748b;" onclick="return confirm('Delete this entry?');">🗑️</a>
+                                            </div>
+                                        </td>
+                                        <td><?php echo esc_html( $row->created_at ); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </form>
             </div>
             <?php
         }
 
         /**
-         * Render Live Stage Control Center with Qualified Quiz Breakdown
+         * Render Live Stage Control Center
          */
         public function render_stage_control_page() {
             global $wpdb;
@@ -665,26 +766,15 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                     'spin_id'   => 0,
                     'candidate' => null,
                 ) );
-                echo '<div class="notice notice-success is-dismissible"><p><strong>All entries for ' . esc_html( $s['event_name'] ) . ' have been reset to Eligible (valid) status and Live Broadcast reopened!</strong></p></div>';
+                echo '<div class="notice notice-success is-dismissible"><p><strong>Winner status reset and Live Broadcast reopened!</strong></p></div>';
             }
 
-            $total_valid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid'", $c_slug ) );
-            if ( ! empty( $s['quiz_enabled'] ) ) {
-                $qualified_count = (int) $wpdb->get_var(
-                    $wpdb->prepare(
-                        "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND quiz_answer = %s",
-                        $c_slug,
-                        $s['quiz_correct']
-                    )
-                );
-            } else {
-                $qualified_count = $total_valid;
-            }
+            $total_entries   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s", $c_slug ) );
+            $qual_where      = tch_raffle_get_qualified_where_sql( $s );
+            $qualified_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND $qual_where", $c_slug ) );
+            $winner_count    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) );
+            $dq_count        = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND (status = 'disqualified' OR manual_status = 'disqualified')", $c_slug ) );
 
-            $winner_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) );
-            $dq_count     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'disqualified'", $c_slug ) );
-
-            $public_stage_url   = home_url( '/?tch_live_stage=1' );
             $operator_stage_url = home_url( '/?tch_live_stage=1&operator=1' );
             $team_portal_url    = home_url( '/?tch_team_entries=1' );
             ?>
@@ -707,14 +797,15 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                             🚀 Launch Operator Stage ↗
                         </a>
                         <p style="font-size:12px;color:#cbd5e1;margin:0;">
-                            Draws exclusively from the <strong><?php echo esc_html( $qualified_count ); ?> Qualified Tickets</strong> that answered <code><?php echo esc_html( $s['quiz_correct'] ); ?></code>.
+                            Draws exclusively from the <strong><?php echo esc_html( $qualified_count ); ?> Qualified Tickets</strong>.
                         </p>
                     </div>
 
                     <div style="background:#1e293b;color:#fff;padding:26px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.12);">
                         <span style="background:rgba(56,189,248,0.2);color:#38bdf8;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;">2. FRONTEND TEAM ENTRIES PORTAL</span>
-                        <h2 style="color:#fff;font-size:21px;margin:12px 0 8px;">Shareable Team Entries Page</h2>
+                        <h2 style="color:#fff;font-size:21px;margin:12px 0 8px;">Review Answers & Qualify/DQ</h2>
                         <p style="color:#94a3b8;line-height:1.5;margin-bottom:14px;">
+                            Your team can review answers, click <strong>✅ Qualify</strong> or <strong>❌ Disqualify</strong>, and export CSVs:<br>
                             Team Portal PIN: <code style="background:#0f172a;color:#38bdf8;padding:2px 8px;border-radius:4px;font-weight:800;"><?php echo esc_html( $s['team_entries_pin'] ); ?></code>
                         </p>
                         <input type="text" readonly value="<?php echo esc_url( $team_portal_url ); ?>" style="width:100%;margin-bottom:10px;background:#0f172a;color:#fff;border:1px solid #334155;padding:8px;" onclick="this.select();">
@@ -726,13 +817,13 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                     <div style="background:#fff;padding:26px;border:1px solid #ccd0d4;border-radius:12px;">
                         <h2 style="margin-top:0;">Active Pool Status (<code><?php echo esc_html( $c_slug ); ?></code>)</h2>
                         <ul style="font-size:14.5px;line-height:1.9;margin:12px 0 18px;">
-                            <li>👥 <strong>Total Valid Registrations:</strong> <?php echo esc_html( $total_valid ); ?></li>
-                            <li>✅ <strong>Qualified (Answered <?php echo esc_html( $s['quiz_correct'] ); ?>):</strong> <strong style="color:#16a34a;font-size:16px;"><?php echo esc_html( $qualified_count ); ?></strong></li>
+                            <li>👥 <strong>Total Registrations:</strong> <?php echo esc_html( $total_entries ); ?></li>
+                            <li>✅ <strong>Qualified for Live Draw:</strong> <strong style="color:#16a34a;font-size:16px;"><?php echo esc_html( $qualified_count ); ?></strong></li>
                             <li>🏆 <strong>Confirmed Winners:</strong> <?php echo esc_html( $winner_count ); ?></li>
-                            <li>❌ <strong>Disqualified Tickets:</strong> <?php echo esc_html( $dq_count ); ?></li>
+                            <li>❌ <strong>Disqualified Entries:</strong> <?php echo esc_html( $dq_count ); ?></li>
                         </ul>
 
-                        <form method="post" onsubmit="return confirm('Reset all Winners and Disqualified entries for this event back to Eligible?');">
+                        <form method="post" onsubmit="return confirm('Reset Winner status and reopen the Live Broadcast?');">
                             <?php wp_nonce_field( 'tch_reset_draw_nonce' ); ?>
                             <button type="submit" name="tch_reset_draw_statuses" class="button button-secondary" style="width:100%;">
                                 🔄 Reset Winner & Reopen Draw (Practice Reset)
