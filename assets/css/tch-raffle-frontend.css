@@ -932,3 +932,67 @@
         font-size: 16px !important;
     }
 }
+
+/* ==========================================================================
+   v2.2 Additions: "Guess the Tyre Pressure?" Skill Challenge Box
+   ========================================================================== */
+
+.tch-quiz-card {
+    background: linear-gradient(135deg, rgba(250, 204, 21, 0.12) 0%, rgba(11, 15, 25, 0.9) 100%);
+    border: 1.5px solid rgba(250, 204, 21, 0.45);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 12px 0 14px;
+}
+
+.tch-quiz-badge {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--tch-gold);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.tch-quiz-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.tch-quiz-label span {
+    color: var(--tch-gold);
+}
+
+.tch-select-wrap {
+    position: relative;
+}
+
+.tch-select-wrap select {
+    width: 100%;
+    background-color: #0b0f19 !important;
+    border: 1px solid #475569 !important;
+    border-radius: 10px !important;
+    padding: 9px 12px !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    height: 42px !important;
+    margin: 0 !important;
+    cursor: pointer;
+    box-shadow: none !important;
+    transition: border-color 0.2s;
+}
+
+.tch-select-wrap select:focus {
+    border-color: var(--tch-gold) !important;
+    outline: none !important;
+}
+
+@media (max-width: 640px) {
+    .tch-select-wrap select {
+        font-size: 16px !important;
+    }
+}
