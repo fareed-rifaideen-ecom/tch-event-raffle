@@ -15,14 +15,10 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             add_action( 'wp_ajax_nopriv_tch_team_portal_action', array( $this, 'handle_team_portal_ajax' ) );
         }
 
-        /**
-         * Hijack ?tch_live_stage=1 and ?tch_team_entries=1
-         */
         public function intercept_custom_routes() {
             if ( isset( $_GET['tch_live_stage'] ) ) {
                 show_admin_bar( false );
 
-                // If Operator is launching the stage and a previous spin was left unconfirmed, reset to idle so it never auto-spins
                 if ( isset( $_GET['operator'] ) && tch_raffle_user_can_operate() ) {
                     $ls = tch_raffle_get_live_state();
                     if ( 'winner_confirmed' !== $ls['status'] ) {
@@ -44,9 +40,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             }
         }
 
-        /**
-         * Verify if request is authorized as Stage Operator
-         */
         private function verify_operator_access() {
             if ( tch_raffle_user_can_operate() ) {
                 return true;
@@ -59,9 +52,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             return false;
         }
 
-        /**
-         * Verify if request is authorized for Team Entries Portal
-         */
         private function verify_team_portal_access() {
             if ( tch_raffle_user_can_operate() ) {
                 return true;
@@ -75,7 +65,7 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
         }
 
         /**
-         * Handle AJAX actions for Live Stage
+         * Handle AJAX actions for Live Stage (Filtered by Correct Tyre Pressure Answer)
          */
         public function handle_stage_ajax() {
             check_ajax_referer( 'tch_stage_nonce', 'nonce' );
@@ -86,17 +76,31 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
             $sub_action = sanitize_text_field( wp_unslash( $_POST['sub_action'] ?? '' ) );
 
-            // PUBLIC ACTION 1: Get Pool & Live Broadcast State
+            $quiz_active  = ! empty( $s['quiz_enabled'] );
+            $correct_ans  = trim( (string) $s['quiz_correct'] );
+
+            // PUBLIC ACTION 1: Get Qualified Pool & Live Broadcast State
             if ( 'get_pool' === $sub_action ) {
-                $valid_entries = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT id, ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' ORDER BY id ASC",
-                        $c_slug
-                    )
-                );
+                if ( $quiz_active ) {
+                    $valid_entries = $wpdb->get_results(
+                        $wpdb->prepare(
+                            "SELECT id, ref_code, full_name, quiz_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND quiz_answer = %s ORDER BY id ASC",
+                            $c_slug,
+                            $correct_ans
+                        )
+                    );
+                } else {
+                    $valid_entries = $wpdb->get_results(
+                        $wpdb->prepare(
+                            "SELECT id, ref_code, full_name, quiz_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' ORDER BY id ASC",
+                            $c_slug
+                        )
+                    );
+                }
+
                 $winners = $wpdb->get_results(
                     $wpdb->prepare(
-                        "SELECT id, ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
+                        "SELECT id, ref_code, full_name, quiz_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
                         $c_slug
                     )
                 );
@@ -122,7 +126,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                 wp_send_json_error( array( 'message' => 'Incorrect Operator PIN.' ) );
             }
 
-            // --- ALL ACTIONS BELOW REQUIRE OPERATOR ACCESS ---
             if ( ! $this->verify_operator_access() ) {
                 wp_send_json_error( array( 'message' => 'Operator authorization required.' ) );
             }
@@ -136,32 +139,54 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                 wp_send_json_success( array( 'live_state' => $live_state ) );
             }
 
-            // OPERATOR ACTION 4: Pick a Random Candidate & Broadcast Spin
+            // OPERATOR ACTION 4: Pick a Random Candidate ONLY from Qualified Correct Answers
             if ( 'draw_candidate' === $sub_action ) {
-                $candidate = $wpdb->get_row(
-                    $wpdb->prepare(
-                        "SELECT * FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' ORDER BY RAND() LIMIT 1",
-                        $c_slug
-                    )
-                );
-
-                if ( ! $candidate ) {
-                    wp_send_json_error( array( 'message' => 'No eligible tickets left in the pool for this event!' ) );
+                if ( $quiz_active ) {
+                    $candidate = $wpdb->get_row(
+                        $wpdb->prepare(
+                            "SELECT * FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND quiz_answer = %s ORDER BY RAND() LIMIT 1",
+                            $c_slug,
+                            $correct_ans
+                        )
+                    );
+                } else {
+                    $candidate = $wpdb->get_row(
+                        $wpdb->prepare(
+                            "SELECT * FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' ORDER BY RAND() LIMIT 1",
+                            $c_slug
+                        )
+                    );
                 }
 
-                $decoys = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND id != %d ORDER BY RAND() LIMIT 23",
-                        $c_slug,
-                        $candidate->id
-                    )
-                );
+                if ( ! $candidate ) {
+                    wp_send_json_error( array( 'message' => 'No qualified tickets (with the correct answer "' . $correct_ans . '") left in the pool!' ) );
+                }
+
+                if ( $quiz_active ) {
+                    $decoys = $wpdb->get_results(
+                        $wpdb->prepare(
+                            "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND quiz_answer = %s AND id != %d ORDER BY RAND() LIMIT 23",
+                            $c_slug,
+                            $correct_ans,
+                            $candidate->id
+                        )
+                    );
+                } else {
+                    $decoys = $wpdb->get_results(
+                        $wpdb->prepare(
+                            "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid' AND id != %d ORDER BY RAND() LIMIT 23",
+                            $c_slug,
+                            $candidate->id
+                        )
+                    );
+                }
 
                 $masked_phone   = substr( $candidate->phone, 0, 6 ) . '••••' . substr( $candidate->phone, -2 );
                 $candidate_data = array(
                     'id'           => (int) $candidate->id,
                     'ref_code'     => $candidate->ref_code,
                     'full_name'    => $candidate->full_name,
+                    'quiz_answer'  => $candidate->quiz_answer ?? '',
                     'masked_phone' => $masked_phone,
                     'decoys'       => is_array( $decoys ) ? $decoys : array(),
                 );
@@ -179,7 +204,7 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                 ) );
             }
 
-            // OPERATOR ACTION 5: Confirm Candidate as Official Winner & End Broadcast
+            // OPERATOR ACTION 5: Confirm Candidate as Official Winner
             if ( 'confirm_winner' === $sub_action ) {
                 $entry_id = absint( $_POST['entry_id'] ?? 0 );
                 $wpdb->update(
@@ -232,7 +257,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             $stage_css   = TCH_RAFFLE_URL . 'assets/css/tch-raffle-stage.css?v=' . TCH_RAFFLE_VERSION;
             $stage_js    = TCH_RAFFLE_URL . 'assets/js/tch-raffle-stage.js?v=' . TCH_RAFFLE_VERSION;
 
-            // Check if a winner is already confirmed in DB
             $winners = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT id, ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
@@ -270,7 +294,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             </head>
             <body class="tch-stage-body">
 
-                <!-- Top Broadcast Bar -->
                 <header class="tch-stage-header">
                     <div class="tch-stage-brand">
                         <span class="tch-live-dot" id="tch-header-live-dot"></span>
@@ -292,7 +315,7 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                         </div>
 
                         <div class="tch-stat-pill" id="tch-eligible-pill">
-                            <span>ELIGIBLE TICKETS:</span>
+                            <span>QUALIFIED TICKETS:</span>
                             <strong id="tch-stat-valid">0</strong>
                         </div>
 
@@ -303,10 +326,8 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                     </div>
                 </header>
 
-                <!-- Main Stage Grid -->
                 <main class="tch-stage-main">
 
-                    <!-- Left Column: Prize Bike & Confirmed Winner Podium -->
                     <section class="tch-stage-prize">
                         <span class="tch-grand-tag">🏆 OFFICIAL RAFFLE DRAW</span>
                         <h1><?php echo esc_html( $s['headline'] ); ?></h1>
@@ -320,16 +341,12 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                         </div>
                     </section>
 
-                    <!-- Right Column: Multi-Engine Stage OR Broadcast Ended Result Screen -->
                     <section class="tch-stage-machine">
                         <div class="tch-machine-card <?php echo $has_winner ? 'is-winner' : ''; ?>" id="tch-machine-card">
                             <div class="tch-machine-status" id="tch-machine-status">
                                 <?php echo $has_winner ? '🏁 LIVE BROADCAST ENDED — OFFICIAL DRAW RESULT' : 'READY FOR OPERATOR TO SPIN'; ?>
                             </div>
 
-                            <!-- ==========================================
-                                 BROADCAST ENDED / OFFICIAL WINNER VIEW
-                                 ========================================== -->
                             <div id="tch-broadcast-ended-view" class="tch-broadcast-ended-view" style="display:<?php echo $has_winner ? 'block' : 'none'; ?>;">
                                 <div class="tch-ended-trophy">🏆</div>
                                 <div class="tch-ended-label">WINNING RAFFLE TICKET</div>
@@ -342,25 +359,19 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                 <p class="tch-ended-note">Congratulations to our lucky winner! Thank you to everyone who participated at <?php echo esc_html( $s['event_name'] ); ?>.</p>
                             </div>
 
-                            <!-- ==========================================
-                                 ACTIVE ENGINES WRAPPER (Hidden once Winner is Confirmed)
-                                 ========================================== -->
                             <div id="tch-active-engines-wrapper" style="display:<?php echo $has_winner ? 'none' : 'block'; ?>;">
-                                <!-- ENGINE 1: DIGITAL SLOT ODOMETER -->
                                 <div class="tch-engine-view" id="tch-engine-slot">
                                     <div class="tch-slot-window" id="tch-slot-window">
                                         <div class="tch-slot-code" id="tch-slot-code"><?php echo esc_html( $s['ticket_prefix'] ); ?>•••••</div>
                                     </div>
                                 </div>
 
-                                <!-- ENGINE 2: 3D VERTICAL COLOR DRUM -->
                                 <div class="tch-engine-view" id="tch-engine-drum" style="display:none;">
                                     <div class="tch-drum-viewport">
                                         <div class="tch-drum-barrel" id="tch-drum-barrel"></div>
                                     </div>
                                 </div>
 
-                                <!-- ENGINE 3 & 4: NEON CYBER WHEEL & CARNIVAL WHEEL -->
                                 <div class="tch-engine-view" id="tch-engine-wheel" style="display:none;">
                                     <div class="tch-wheel-stage" id="tch-wheel-wrapper">
                                         <div class="tch-wheel-pointer" id="tch-wheel-pointer">▼</div>
@@ -369,7 +380,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                     </div>
                                 </div>
 
-                                <!-- ENGINE 5: LOTTO BALL CAGE & CHUTE -->
                                 <div class="tch-engine-view" id="tch-engine-lotto" style="display:none;">
                                     <div class="tch-lotto-wrapper">
                                         <div class="tch-lotto-dome">
@@ -386,7 +396,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                 </div>
                             </div>
 
-                            <!-- Candidate Reveal & Verification Panel -->
                             <div class="tch-candidate-panel" id="tch-candidate-panel" style="display:none;">
                                 <div class="tch-candidate-ref-badge" id="tch-candidate-ref-badge">TCH-00000</div>
                                 <div class="tch-candidate-name" id="tch-candidate-name">-</div>
@@ -405,14 +414,12 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                 </div>
                             </div>
 
-                            <!-- Primary Spin Button (Operator Only) -->
                             <div class="tch-spin-controls" id="tch-spin-controls" style="display:<?php echo ( $is_operator && ! $has_winner ) ? 'block' : 'none'; ?>;">
                                 <button type="button" id="tch-btn-spin" class="tch-spin-btn">
                                     🎰 SPIN TO DRAW WINNER
                                 </button>
                             </div>
 
-                            <!-- Spectator Live Indicator -->
                             <div class="tch-spectator-banner" id="tch-spectator-banner" style="display:<?php echo $is_operator ? 'none' : 'flex'; ?>;">
                                 <span class="tch-live-dot" id="tch-spec-dot"></span>
                                 <span id="tch-spectator-msg">
@@ -425,7 +432,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
 
                 </main>
 
-                <!-- Team Operator PIN Modal -->
                 <div class="tch-pin-modal" id="tch-pin-modal" style="display:none;">
                     <div class="tch-pin-dialog">
                         <h3>🔑 Team Operator Unlock</h3>
@@ -445,16 +451,13 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
         }
 
         /**
-         * =====================================================================
-         * FRONTEND TEAM ENTRIES PORTAL (?tch_team_entries=1)
-         * =====================================================================
+         * Frontend Team Entries Portal (?tch_team_entries=1)
          */
         private function handle_team_portal_route() {
             global $wpdb;
             $s          = tch_raffle_get_settings();
             $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
 
-            // Handle CSV Download from Frontend Team Portal
             if ( isset( $_GET['export_csv'] ) && '1' === $_GET['export_csv'] ) {
                 if ( ! $this->verify_team_portal_access() ) {
                     wp_die( 'Invalid Team PIN for CSV Export.', 'Unauthorized', array( 'response' => 403 ) );
@@ -472,8 +475,8 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                 }
                 if ( ! empty( $search ) ) {
                     $like    = '%' . $wpdb->esc_like( $search ) . '%';
-                    $where[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s)';
-                    array_push( $args, $like, $like, $like, $like );
+                    $where[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR quiz_answer LIKE %s)';
+                    array_push( $args, $like, $like, $like, $like, $like );
                 }
 
                 $where_sql = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
@@ -483,10 +486,23 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                 header( 'Content-Type: text/csv; charset=utf-8' );
                 header( 'Content-Disposition: attachment; filename=tch-entries-' . sanitize_file_name( $filter_slug ) . '-' . gmdate( 'Y-m-d-Hi' ) . '.csv' );
                 $out = fopen( 'php://output', 'w' );
-                fputcsv( $out, array( 'ID', 'Event Campaign', 'Ticket Ref', 'Full Name', 'Email', 'Mobile / WhatsApp', 'IG Confirmed', 'YT Confirmed', 'Status', 'IP', 'Registered At' ) );
+                fputcsv( $out, array( 'ID', 'Event Campaign', 'Ticket Ref', 'Full Name', 'Email', 'Mobile / WhatsApp', 'Tyre Pressure Answer', 'Qualified', 'Status', 'Registered At' ) );
                 if ( ! empty( $entries ) ) {
                     foreach ( $entries as $r ) {
-                        fputcsv( $out, $r );
+                        $ans  = $r['quiz_answer'] ?? '';
+                        $qual = tch_raffle_is_answer_correct( $ans, $s ) ? 'YES' : 'NO';
+                        fputcsv( $out, array(
+                            $r['id'],
+                            $r['campaign_slug'],
+                            $r['ref_code'],
+                            $r['full_name'],
+                            $r['email'],
+                            $r['phone'],
+                            $ans,
+                            $qual,
+                            $r['status'],
+                            $r['created_at'],
+                        ) );
                     }
                 }
                 fclose( $out );
@@ -517,7 +533,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                     </div>
                 </header>
 
-                <!-- PIN Gate Screen -->
                 <div id="tch-team-pin-gate" class="tch-pin-modal" style="display:<?php echo $is_unlocked ? 'none' : 'flex'; ?>;">
                     <div class="tch-pin-dialog">
                         <h3>🔒 Team Entries Portal</h3>
@@ -528,18 +543,17 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                     </div>
                 </div>
 
-                <!-- Main Portal Content -->
                 <main class="tch-team-portal-wrap" id="tch-team-portal-wrap" style="display:<?php echo $is_unlocked ? 'block' : 'none'; ?>;">
                     <div class="tch-tp-stats" id="tch-tp-stats">
                         <div class="tch-tp-stat-card"><small>TOTAL ENTRIES</small><strong id="tp-count-total">0</strong></div>
-                        <div class="tch-tp-stat-card"><small>ELIGIBLE POOL</small><strong id="tp-count-valid" style="color:#86efac;">0</strong></div>
+                        <div class="tch-tp-stat-card"><small>QUALIFIED (CORRECT PSI)</small><strong id="tp-count-qualified" style="color:#86efac;">0</strong></div>
                         <div class="tch-tp-stat-card"><small>CONFIRMED WINNER</small><strong id="tp-count-win" style="color:#facc15;">0</strong></div>
                         <div class="tch-tp-stat-card"><small>DISQUALIFIED</small><strong id="tp-count-dq" style="color:#fca5a5;">0</strong></div>
                     </div>
 
                     <div class="tch-tp-toolbar">
                         <select id="tp-campaign-select" class="tch-tp-input" style="max-width:240px;"></select>
-                        <input type="search" id="tp-search-input" class="tch-tp-input" placeholder="Search Ticket ID, Name, Email, or WhatsApp...">
+                        <input type="search" id="tp-search-input" class="tch-tp-input" placeholder="Search Ticket ID, Name, Email, WhatsApp, or Answer...">
                         <button type="button" id="tp-search-btn" class="tch-icon-btn" style="background:#eab308;color:#070b14;font-weight:800;">🔍 Search</button>
                         <button type="button" id="tp-export-btn" class="tch-icon-btn" style="background:#22c55e;color:#052e16;font-weight:800;">📥 Export CSV</button>
                     </div>
@@ -552,12 +566,13 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                     <th>Participant Name</th>
                                     <th>WhatsApp / Mobile</th>
                                     <th>Email</th>
+                                    <th>Tyre Pressure Guess</th>
                                     <th>Status</th>
                                     <th>Registered At</th>
                                 </tr>
                             </thead>
                             <tbody id="tp-table-body">
-                                <tr><td colspan="6" style="text-align:center;padding:30px;">Loading entries...</td></tr>
+                                <tr><td colspan="7" style="text-align:center;padding:30px;">Loading entries...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -602,10 +617,10 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                 if (teamPin) sessionStorage.setItem('tch_team_portal_pin', teamPin);
 
                                 const d = res.data;
-                                document.getElementById('tp-count-total').textContent = d.stats.total;
-                                document.getElementById('tp-count-valid').textContent = d.stats.valid;
-                                document.getElementById('tp-count-win').textContent   = d.stats.winner;
-                                document.getElementById('tp-count-dq').textContent    = d.stats.dq;
+                                document.getElementById('tp-count-total').textContent     = d.stats.total;
+                                document.getElementById('tp-count-qualified').textContent = d.stats.qualified;
+                                document.getElementById('tp-count-win').textContent       = d.stats.winner;
+                                document.getElementById('tp-count-dq').textContent        = d.stats.dq;
 
                                 if (campSelect.options.length === 0 && d.campaigns) {
                                     d.campaigns.forEach(c => {
@@ -622,19 +637,21 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
                                 }
 
                                 if (!d.entries || d.entries.length === 0) {
-                                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:28px;color:#94a3b8;">No matching entries found.</td></tr>';
+                                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:28px;color:#94a3b8;">No matching entries found.</td></tr>';
                                     return;
                                 }
 
                                 tbody.innerHTML = d.entries.map(row => {
                                     const cleanPhone = String(row.phone).replace(/[^0-9]/g, '');
                                     const badgeClass = row.status === 'winner' ? 'tp-badge-win' : (row.status === 'disqualified' ? 'tp-badge-dq' : 'tp-badge-valid');
+                                    const ansBadge   = row.is_correct ? `<span style="color:#86efac;font-weight:700;">✅ ${esc(row.quiz_answer)}</span>` : `<span style="color:#fca5a5;">❌ ${esc(row.quiz_answer || '-')}</span>`;
                                     return `
                                         <tr>
                                             <td><code class="tp-ref">${esc(row.ref_code)}</code></td>
                                             <td><strong>${esc(row.full_name)}</strong></td>
                                             <td><a href="https://wa.me/${esc(cleanPhone)}" target="_blank" style="color:#38bdf8;text-decoration:none;">📱 ${esc(row.phone)}</a></td>
                                             <td><a href="mailto:${esc(row.email)}" style="color:#cbd5e1;text-decoration:none;">${esc(row.email)}</a></td>
+                                            <td>${ansBadge}</td>
                                             <td><span class="tp-badge ${badgeClass}">${esc(row.status.toUpperCase())}</span></td>
                                             <td style="color:#94a3b8;font-size:12px;">${esc(row.created_at)}</td>
                                         </tr>
@@ -681,9 +698,6 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             <?php
         }
 
-        /**
-         * Handle AJAX Search & Filter for Frontend Team Entries Portal
-         */
         public function handle_team_portal_ajax() {
             check_ajax_referer( 'tch_team_portal_nonce', 'nonce' );
 
@@ -714,30 +728,44 @@ if ( ! class_exists( 'TCH_Raffle_Stage' ) ) {
             }
             if ( ! empty( $search ) ) {
                 $like    = '%' . $wpdb->esc_like( $search ) . '%';
-                $where[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s)';
-                array_push( $args, $like, $like, $like, $like );
+                $where[] = '(ref_code LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR quiz_answer LIKE %s)';
+                array_push( $args, $like, $like, $like, $like, $like );
             }
 
             $where_sql = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
-            $sql       = "SELECT id, campaign_slug, ref_code, full_name, email, phone, status, created_at FROM `$table_name` $where_sql ORDER BY created_at DESC LIMIT 500";
-            $entries   = ! empty( $args ) ? $wpdb->get_results( $wpdb->prepare( $sql, $args ) ) : $wpdb->get_results( $sql );
+            $sql       = "SELECT id, campaign_slug, ref_code, full_name, email, phone, quiz_answer, status, created_at FROM `$table_name` $where_sql ORDER BY created_at DESC LIMIT 500";
+            $raw_rows  = ! empty( $args ) ? $wpdb->get_results( $wpdb->prepare( $sql, $args ) ) : $wpdb->get_results( $sql );
 
-            // Stats for selected campaign
+            $entries = array();
+            if ( is_array( $raw_rows ) ) {
+                foreach ( $raw_rows as $r ) {
+                    $r->is_correct = tch_raffle_is_answer_correct( $r->quiz_answer ?? '', $s );
+                    $entries[]     = $r;
+                }
+            }
+
             $stat_where = ( ! empty( $campaign ) && 'ALL' !== $campaign ) ? $wpdb->prepare( 'WHERE campaign_slug = %s', $campaign ) : '';
             $total_cnt  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` $stat_where" );
-            $valid_cnt  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'valid'" : "WHERE status = 'valid'" ) );
-            $win_cnt    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'winner'" : "WHERE status = 'winner'" ) );
-            $dq_cnt     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'disqualified'" : "WHERE status = 'disqualified'" ) );
+            if ( ! empty( $s['quiz_enabled'] ) ) {
+                $qual_where = $stat_where
+                    ? $stat_where . $wpdb->prepare( " AND status = 'valid' AND quiz_answer = %s", $s['quiz_correct'] )
+                    : $wpdb->prepare( "WHERE status = 'valid' AND quiz_answer = %s", $s['quiz_correct'] );
+                $qual_cnt = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` $qual_where" );
+            } else {
+                $qual_cnt = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'valid'" : "WHERE status = 'valid'" ) );
+            }
+            $win_cnt = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'winner'" : "WHERE status = 'winner'" ) );
+            $dq_cnt  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$table_name` " . ( $stat_where ? "$stat_where AND status = 'disqualified'" : "WHERE status = 'disqualified'" ) );
 
             wp_send_json_success( array(
-                'entries'          => is_array( $entries ) ? $entries : array(),
+                'entries'          => $entries,
                 'campaigns'        => $campaigns,
                 'current_campaign' => $campaign,
                 'stats'            => array(
-                    'total'  => $total_cnt,
-                    'valid'  => $valid_cnt,
-                    'winner' => $win_cnt,
-                    'dq'     => $dq_cnt,
+                    'total'     => $total_cnt,
+                    'qualified' => $qual_cnt,
+                    'winner'    => $win_cnt,
+                    'dq'        => $dq_cnt,
                 ),
             ) );
         }
