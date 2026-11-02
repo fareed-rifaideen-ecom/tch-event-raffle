@@ -1,5 +1,5 @@
 /**
- * TCH Event Raffle — Countdown Timer, Auto-Lock, Modal & 3D Ticket Flip
+ * TCH Event Raffle v2.0 — Countdown Timer, Auto-Lock, 3D Ticket Flip & Ticket Lookup
  */
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof tchRaffleData === 'undefined') return;
@@ -149,6 +149,49 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Participant Ticket Status & Result Lookup Handler
+    const lookupForm   = document.getElementById('tch-lookup-form');
+    const lookupInput  = document.getElementById('tch-lookup-input');
+    const lookupResult = document.getElementById('tch-lookup-result');
+
+    if (lookupForm) {
+        lookupForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const q = lookupInput.value.trim();
+            if (!q) return;
+
+            lookupResult.style.display = 'block';
+            lookupResult.innerHTML     = '<span style="color:#94a3b8;">Checking ticket...</span>';
+
+            const fd = new FormData();
+            fd.append('action', 'tch_check_ticket_status');
+            fd.append('nonce', tchRaffleData.nonce);
+            fd.append('lookup_query', q);
+
+            fetch(tchRaffleData.ajaxUrl, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        const d = res.data;
+                        lookupResult.innerHTML = `
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <div>
+                                    <strong style="color:#fff;">${escapeHtml(d.full_name)}</strong>
+                                    <code style="background:#1e293b;color:#facc15;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:800;">${escapeHtml(d.ref_code)}</code>
+                                </div>
+                                <span style="font-weight:700;color:#86efac;">${escapeHtml(d.status_label)}</span>
+                            </div>
+                        `;
+                    } else {
+                        lookupResult.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(res.data.message || 'Ticket not found.')}</span>`;
+                    }
+                })
+                .catch(() => {
+                    lookupResult.innerHTML = '<span style="color:#fca5a5;">Could not check ticket right now.</span>';
+                });
+        });
+    }
+
     function showError(msg) {
         feedbackBox.textContent   = msg;
         feedbackBox.className     = 'tch-form-feedback is-error';
@@ -159,5 +202,11 @@ document.addEventListener('DOMContentLoaded', function () {
         submitBtn.disabled      = false;
         btnText.style.display   = 'inline';
         btnLoader.style.display = 'none';
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 });
