@@ -583,7 +583,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
         }
 
         /**
-         * Dispatch HTML Email Scoped to marketing@thecyclehub.com
+         * Dispatch Bulletproof HTML Email (Outlook, Gmail & Apple Mail Optimized)
          */
         private function send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $text_answer, $s ) {
             $sender_email = ! empty( $s['sender_email'] ) ? $s['sender_email'] : 'marketing@thecyclehub.com';
@@ -597,7 +597,10 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             add_filter( 'wp_mail_from_name', $from_name_cb, 999 );
             add_filter( 'wp_mail_content_type', $html_type_cb, 999 );
 
-            $subject             = '🎟️ Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
+            // Prevent WordPress from converting text characters into giant 72x72 images in Outlook
+            remove_filter( 'wp_mail', 'wp_staticize_emoji_for_email' );
+
+            $subject             = 'Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
             $formatted_date      = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
             $draw_date_raw       = ! empty( $s['live_draw_date'] ) ? $s['live_draw_date'] : $s['event_date'];
             $formatted_draw_date = date_i18n( 'jS M Y', strtotime( $draw_date_raw ) );
@@ -608,63 +611,112 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             if ( ! empty( $quiz_answer ) ) {
                 $extra_rows_html .= '
                 <tr>
-                    <td style="padding:6px 0;color:#94a3b8;">🚲 ' . esc_html( $s['quiz_question'] ) . '</td>
-                    <td style="padding:6px 0;text-align:right;font-weight:700;color:#facc15;">' . esc_html( $quiz_answer ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">' . esc_html( $s['quiz_question'] ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#facc15;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $quiz_answer ) . '</td>
                 </tr>';
             }
             if ( ! empty( $text_answer ) ) {
                 $extra_rows_html .= '
                 <tr>
-                    <td style="padding:6px 0;color:#94a3b8;">✍️ ' . esc_html( $s['text_q_question'] ) . '</td>
-                    <td style="padding:6px 0;text-align:right;font-weight:700;color:#38bdf8;">' . esc_html( $text_answer ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">' . esc_html( $s['text_q_question'] ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#38bdf8;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $text_answer ) . '</td>
                 </tr>';
             }
 
-            $body = '
-            <div style="background-color:#0f172a;padding:35px 15px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
-                <div style="max-width:520px;margin:0 auto;background:#1e293b;border-radius:16px;overflow:hidden;border:1px solid #334155;">
-                    <div style="background:linear-gradient(135deg,#eab308 0%,#ca8a04 100%);padding:20px;text-align:center;color:#0f172a;">
-                        <div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">Official Raffle Draw Ticket</div>
-                        <h2 style="margin:6px 0 0;font-size:22px;font-weight:900;">' . esc_html( $s['event_name'] ) . '</h2>
-                    </div>
-                    <div style="padding:30px 25px;text-align:center;">
-                        <p style="margin:0 0 15px;font-size:16px;color:#cbd5e1;">Hi <strong>' . esc_html( $full_name ) . '</strong>, your entry is confirmed!</p>
-                        <div style="background:#0f172a;border:2px dashed #eab308;border-radius:12px;padding:20px;margin:20px 0;">
-                            <div style="font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Your Reference Number</div>
-                            <div style="font-size:34px;font-weight:900;color:#eab308;letter-spacing:3px;font-family:monospace;">' . esc_html( $ref_code ) . '</div>
-                        </div>
-                        <table style="width:100%;margin-top:20px;border-top:1px solid #334155;padding-top:15px;font-size:14px;color:#cbd5e1;text-align:left;">
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">📍 Location:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $s['event_place'] ) . '</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">📅 Event Date:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $formatted_date ) . '</td>
-                            </tr>
-                            ' . $extra_rows_html . '
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">⏰ Live Draw Schedule:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;color:#eab308;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
-                            </tr>
-                        </table>
-                        <div style="margin-top:22px;">
-                            <a href="' . esc_url( $stage_url ) . '" style="display:inline-block;background:#eab308;color:#0f172a;font-weight:800;padding:12px 22px;border-radius:10px;text-decoration:none;font-size:14px;">
-                                📡 Watch Live Raffle Draw Online ↗
-                            </a>
-                        </div>
-                        <p style="font-size:13px;color:#94a3b8;margin-top:22px;line-height:1.5;">
-                            Make sure you have followed <a href="' . esc_url( $s['ig_url'] ) . '" style="color:#eab308;">@thecyclehub on Instagram</a> (with your bike selfie tagged) and subscribed to our <a href="' . esc_url( $s['yt_url'] ) . '" style="color:#eab308;">YouTube Channel</a> so your ticket passes verification during the live draw!
-                        </p>
-                    </div>
-                    <div style="background:#0f172a;padding:14px;text-align:center;font-size:12px;color:#64748b;">
-                        &copy; ' . gmdate( 'Y' ) . ' The Cycle Hub Dubai • <a href="https://thecyclehub.com" style="color:#94a3b8;text-decoration:none;">thecyclehub.com</a>
-                    </div>
-                </div>
-            </div>';
+            $headers = array(
+                'Reply-To: ' . $sender_name . ' <' . $sender_email . '>',
+            );
 
-            wp_mail( $email, $subject, $body );
+            $body = '<!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>' . esc_html( $subject ) . '</title>
+            </head>
+            <body style="margin:0;padding:0;background-color:#0b0f19;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b0f19" style="background-color:#0b0f19;padding:30px 12px;">
+                    <tr>
+                        <td align="center">
+                            <!-- Fixed 540px Card Table for Outlook Desktop & Mobile -->
+                            <table role="presentation" width="540" cellspacing="0" cellpadding="0" border="0" bgcolor="#1e293b" style="max-width:540px;width:100%;background-color:#1e293b;border:1px solid #334155;border-radius:14px;overflow:hidden;">
+                                
+                                <!-- Solid Gold Header -->
+                                <tr>
+                                    <td bgcolor="#eab308" align="center" style="background-color:#eab308;padding:22px 20px;text-align:center;">
+                                        <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#0f172a;">OFFICIAL RAFFLE DRAW TICKET</div>
+                                        <h1 style="margin:6px 0 0;font-size:22px;font-weight:900;color:#0f172a;line-height:1.2;">' . esc_html( $s['event_name'] ) . '</h1>
+                                    </td>
+                                </tr>
 
+                                <!-- Main Body -->
+                                <tr>
+                                    <td bgcolor="#1e293b" style="background-color:#1e293b;padding:28px 26px;text-align:center;">
+                                        <p style="margin:0 0 18px;font-size:16px;color:#f8fafc;">
+                                            Hi <strong style="color:#ffffff;">' . esc_html( $full_name ) . '</strong>, your raffle entry is confirmed!
+                                        </p>
+
+                                        <!-- Reference Code Box -->
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0f172a" style="background-color:#0f172a;border:2px dashed #eab308;border-radius:10px;margin:0 0 22px;">
+                                            <tr>
+                                                <td align="center" style="padding:20px 15px;text-align:center;">
+                                                    <div style="font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">YOUR REFERENCE NUMBER</div>
+                                                    <div style="font-size:32px;font-weight:900;color:#facc15;letter-spacing:3px;font-family:Consolas,Monaco,monospace;">' . esc_html( $ref_code ) . '</div>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- Event Details Table -->
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #334155;margin-bottom:24px;">
+                                            <tr>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">Location</td>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#f8fafc;font-size:14px;font-weight:600;text-align:right;">' . esc_html( $s['event_place'] ) . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">Event Date</td>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#f8fafc;font-size:14px;font-weight:600;text-align:right;">' . esc_html( $formatted_date ) . '</td>
+                                            </tr>
+                                            ' . $extra_rows_html . '
+                                            <tr>
+                                                <td style="padding:10px 0;color:#94a3b8;font-size:14px;text-align:left;">Live Draw Schedule</td>
+                                                <td style="padding:10px 0;color:#facc15;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- Bulletproof CTA Button Table -->
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 22px;">
+                                            <tr>
+                                                <td align="center" bgcolor="#eab308" style="background-color:#eab308;border-radius:8px;">
+                                                    <a href="' . esc_url( $stage_url ) . '" target="_blank" style="display:inline-block;padding:13px 26px;font-size:14px;font-weight:800;color:#0f172a;text-decoration:none;text-transform:uppercase;letter-spacing:0.5px;">
+                                                        Watch Live Raffle Draw Online &rarr;
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <p style="font-size:13px;color:#94a3b8;margin:0;line-height:1.6;">
+                                            Make sure you have followed <a href="' . esc_url( $s['ig_url'] ) . '" style="color:#facc15;text-decoration:underline;">@thecyclehub on Instagram</a> (with your bike selfie tagged) and subscribed to our <a href="' . esc_url( $s['yt_url'] ) . '" style="color:#facc15;text-decoration:underline;">YouTube Channel</a> so your ticket passes verification during the live draw!
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <!-- Footer -->
+                                <tr>
+                                    <td bgcolor="#0f172a" align="center" style="background-color:#0f172a;padding:15px 20px;text-align:center;font-size:12px;color:#64748b;border-top:1px solid #334155;">
+                                        &copy; ' . gmdate( 'Y' ) . ' The Cycle Hub Dubai &bull; <a href="https://thecyclehub.com" style="color:#94a3b8;text-decoration:none;">thecyclehub.com</a>
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>';
+
+            wp_mail( $email, $subject, $body, $headers );
+
+            add_filter( 'wp_mail', 'wp_staticize_emoji_for_email' );
             remove_filter( 'wp_mail_from', $from_email_cb, 999 );
             remove_filter( 'wp_mail_from_name', $from_name_cb, 999 );
             remove_filter( 'wp_mail_content_type', $html_type_cb, 999 );
