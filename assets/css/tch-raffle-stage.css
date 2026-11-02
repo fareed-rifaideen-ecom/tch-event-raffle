@@ -650,3 +650,203 @@ body.tch-stage-body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   v2.1 Additions: Broadcast Ended Result Screen, Team Entries Portal & Mobile
+   ========================================================================== */
+
+.tch-broadcast-ended-view {
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.18) 0%, rgba(5, 8, 17, 0.95) 80%);
+    border: 2px solid var(--stage-green);
+    border-radius: 22px;
+    padding: 36px 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.25);
+    animation: fadeInUp 0.4s ease;
+}
+
+.tch-ended-trophy {
+    font-size: 54px;
+    margin-bottom: 8px;
+}
+
+.tch-ended-label {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #86efac;
+    margin-bottom: 8px;
+}
+
+.tch-ended-ref {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: clamp(32px, 5vw, 58px);
+    font-weight: 900;
+    color: var(--stage-gold);
+    background: #050811;
+    border: 2px solid var(--stage-gold);
+    border-radius: 14px;
+    padding: 12px 20px;
+    display: inline-block;
+    letter-spacing: 4px;
+    margin-bottom: 14px;
+}
+
+.tch-ended-name {
+    font-size: clamp(24px, 3.2vw, 38px);
+    font-weight: 900;
+    color: #ffffff;
+    margin-bottom: 10px;
+}
+
+.tch-ended-note {
+    font-size: 14px;
+    color: var(--stage-muted);
+    max-width: 440px;
+    margin: 0 auto;
+    line-height: 1.5;
+}
+
+/* Frontend Team Entries Portal (?tch_team_entries=1) */
+.tch-team-portal-wrap {
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 24px 20px 50px;
+}
+
+.tch-tp-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.tch-tp-stat-card {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid var(--stage-border);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.tch-tp-stat-card small {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--stage-muted);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.tch-tp-stat-card strong {
+    font-size: 28px;
+    font-weight: 900;
+    color: #fff;
+}
+
+.tch-tp-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.tch-tp-input {
+    flex: 1;
+    min-width: 200px;
+    background: #0b0f19;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.tch-tp-table-container {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid var(--stage-border);
+    border-radius: 16px;
+    overflow-x: auto;
+}
+
+.tch-tp-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+}
+
+.tch-tp-table th {
+    background: #0b0f19;
+    color: var(--stage-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--stage-border);
+}
+
+.tch-tp-table td {
+    padding: 13px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tp-ref {
+    background: #050811;
+    color: var(--stage-gold);
+    border: 1px solid rgba(250, 204, 21, 0.35);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.tp-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 9px;
+    border-radius: 99px;
+}
+
+.tp-badge-valid { background: rgba(148, 163, 184, 0.2); color: #e2e8f0; }
+.tp-badge-win { background: rgba(34, 197, 94, 0.25); color: #86efac; border: 1px solid #22c55e; }
+.tp-badge-dq { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+
+/* Mobile Stage Optimizations */
+@media (max-width: 768px) {
+    .tch-stage-header {
+        padding: 12px 14px;
+    }
+    .tch-stage-brand {
+        font-size: 12px;
+        width: 100%;
+        justify-content: center;
+    }
+    .tch-stage-stats {
+        width: 100%;
+        justify-content: center;
+    }
+    .tch-stage-main {
+        padding: 12px;
+        gap: 16px;
+    }
+    .tch-stage-prize,
+    .tch-machine-card {
+        padding: 20px 16px;
+        border-radius: 18px;
+    }
+    .tch-stage-bike-img {
+        max-height: 190px;
+    }
+    .tch-wheel-stage {
+        width: 270px;
+        height: 270px;
+    }
+    .tch-lotto-dome {
+        width: 250px;
+        height: 250px;
+    }
+    .tch-slot-window {
+        padding: 22px 12px;
+    }
+}

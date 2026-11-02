@@ -27,7 +27,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
         }
 
         /**
-         * Register Top-Level Menu & Submenus (Accessible to Admins, Shop Managers & Editors)
+         * Register Top-Level Menu & Submenus
          */
         public function register_menus() {
             $cap = tch_raffle_admin_cap();
@@ -96,30 +96,35 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                     $slug = 'event-' . gmdate( 'Y-m-d' );
                 }
 
-                $engine = sanitize_key( wp_unslash( $_POST['stage_engine'] ?? 'slot' ) );
-                $pin    = sanitize_text_field( wp_unslash( $_POST['operator_pin'] ?? '2026' ) );
+                $engine   = sanitize_key( wp_unslash( $_POST['stage_engine'] ?? 'slot' ) );
+                $op_pin   = sanitize_text_field( wp_unslash( $_POST['operator_pin'] ?? '2026' ) );
+                $team_pin = sanitize_text_field( wp_unslash( $_POST['team_entries_pin'] ?? '1234' ) );
+                $ev_date  = sanitize_text_field( wp_unslash( $_POST['event_date'] ?? '' ) );
+                $dr_date  = sanitize_text_field( wp_unslash( $_POST['live_draw_date'] ?? $ev_date ) );
 
                 $settings = array(
-                    'campaign_slug'   => $slug,
-                    'event_name'      => sanitize_text_field( wp_unslash( $_POST['event_name'] ?? '' ) ),
-                    'event_place'     => sanitize_text_field( wp_unslash( $_POST['event_place'] ?? '' ) ),
-                    'event_date'      => sanitize_text_field( wp_unslash( $_POST['event_date'] ?? '' ) ),
-                    'open_time'       => sanitize_text_field( wp_unslash( $_POST['open_time'] ?? '' ) ),
-                    'close_time'      => sanitize_text_field( wp_unslash( $_POST['close_time'] ?? '' ) ),
-                    'live_draw_time'  => sanitize_text_field( wp_unslash( $_POST['live_draw_time'] ?? '' ) ),
-                    'ticket_prefix'   => sanitize_text_field( wp_unslash( $_POST['ticket_prefix'] ?? 'TCH-' ) ),
-                    'stage_engine'    => $engine,
-                    'operator_pin'    => $pin,
-                    'prize_image_url' => esc_url_raw( wp_unslash( $_POST['prize_image_url'] ?? '' ) ),
-                    'headline'        => sanitize_text_field( wp_unslash( $_POST['headline'] ?? '' ) ),
-                    'subheadline'     => sanitize_textarea_field( wp_unslash( $_POST['subheadline'] ?? '' ) ),
-                    'ig_url'          => esc_url_raw( wp_unslash( $_POST['ig_url'] ?? '' ) ),
-                    'ig_label'        => sanitize_text_field( wp_unslash( $_POST['ig_label'] ?? '' ) ),
-                    'yt_url'          => esc_url_raw( wp_unslash( $_POST['yt_url'] ?? '' ) ),
-                    'yt_label'        => sanitize_text_field( wp_unslash( $_POST['yt_label'] ?? '' ) ),
-                    'sender_email'    => sanitize_email( wp_unslash( $_POST['sender_email'] ?? 'marketing@thecyclehub.com' ) ),
-                    'sender_name'     => sanitize_text_field( wp_unslash( $_POST['sender_name'] ?? 'The Cycle Hub' ) ),
-                    'terms_content'   => wp_kses_post( wp_unslash( $_POST['terms_content'] ?? '' ) ),
+                    'campaign_slug'    => $slug,
+                    'event_name'       => sanitize_text_field( wp_unslash( $_POST['event_name'] ?? '' ) ),
+                    'event_place'      => sanitize_text_field( wp_unslash( $_POST['event_place'] ?? '' ) ),
+                    'event_date'       => $ev_date,
+                    'open_time'        => sanitize_text_field( wp_unslash( $_POST['open_time'] ?? '' ) ),
+                    'close_time'       => sanitize_text_field( wp_unslash( $_POST['close_time'] ?? '' ) ),
+                    'live_draw_date'   => $dr_date,
+                    'live_draw_time'   => sanitize_text_field( wp_unslash( $_POST['live_draw_time'] ?? '' ) ),
+                    'ticket_prefix'    => sanitize_text_field( wp_unslash( $_POST['ticket_prefix'] ?? 'TCH-' ) ),
+                    'stage_engine'     => $engine,
+                    'operator_pin'     => $op_pin,
+                    'team_entries_pin' => $team_pin,
+                    'prize_image_url'  => esc_url_raw( wp_unslash( $_POST['prize_image_url'] ?? '' ) ),
+                    'headline'         => sanitize_text_field( wp_unslash( $_POST['headline'] ?? '' ) ),
+                    'subheadline'      => sanitize_textarea_field( wp_unslash( $_POST['subheadline'] ?? '' ) ),
+                    'ig_url'           => esc_url_raw( wp_unslash( $_POST['ig_url'] ?? '' ) ),
+                    'ig_label'         => sanitize_text_field( wp_unslash( $_POST['ig_label'] ?? '' ) ),
+                    'yt_url'           => esc_url_raw( wp_unslash( $_POST['yt_url'] ?? '' ) ),
+                    'yt_label'         => sanitize_text_field( wp_unslash( $_POST['yt_label'] ?? '' ) ),
+                    'sender_email'     => sanitize_email( wp_unslash( $_POST['sender_email'] ?? 'marketing@thecyclehub.com' ) ),
+                    'sender_name'      => sanitize_text_field( wp_unslash( $_POST['sender_name'] ?? 'The Cycle Hub' ) ),
+                    'terms_content'    => wp_kses_post( wp_unslash( $_POST['terms_content'] ?? '' ) ),
                 );
 
                 update_option( 'tch_raffle_settings', $settings );
@@ -152,11 +157,12 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                 $new_prefix = strtoupper( sanitize_text_field( wp_unslash( $_POST['new_ticket_prefix'] ?? 'TCH-' ) ) );
                 $new_slug   = sanitize_title( $new_name . '-' . $new_date );
 
-                $s['campaign_slug'] = $new_slug;
-                $s['event_name']    = $new_name;
-                $s['event_place']   = $new_place;
-                $s['event_date']    = $new_date;
-                $s['ticket_prefix'] = $new_prefix;
+                $s['campaign_slug']  = $new_slug;
+                $s['event_name']     = $new_name;
+                $s['event_place']    = $new_place;
+                $s['event_date']     = $new_date;
+                $s['live_draw_date'] = $new_date;
+                $s['ticket_prefix']  = $new_prefix;
 
                 update_option( 'tch_raffle_settings', $s );
                 tch_raffle_update_live_state( array(
@@ -219,25 +225,29 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             <div class="wrap">
                 <h1 style="display:flex;align-items:center;gap:10px;">
                     <span class="dashicons dashicons-tickets-alt" style="font-size:28px;width:28px;height:28px;"></span>
-                    TCH Event Raffle v2.0 — Settings, Stage Engines & Multi-Event Manager
+                    TCH Event Raffle v2.1 — Settings, Stage Engines & Team Portal
                 </h1>
 
                 <?php if ( isset( $_GET['updated'] ) ) : ?>
-                    <div class="notice notice-success is-dismissible"><p><strong>Settings saved!</strong> Your Landing Page and Live Stage have been updated.</p></div>
+                    <div class="notice notice-success is-dismissible"><p><strong>Settings saved!</strong> Your Landing Page, Live Stage, and Team Portal have been updated.</p></div>
                 <?php endif; ?>
 
                 <?php if ( isset( $_GET['archived'] ) ) : ?>
                     <div class="notice notice-success is-dismissible"><p><strong>Previous event archived!</strong> Your new event campaign is now live with a fresh entry pool.</p></div>
                 <?php endif; ?>
 
-                <div style="background:#fff;border-left:4px solid #00a32a;padding:12px 16px;margin:15px 0;box-shadow:0 1px 2px rgba(0,0,0,0.06);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+                <!-- Quick Links Bar -->
+                <div style="background:#fff;border-left:4px solid #00a32a;padding:14px 18px;margin:15px 0;box-shadow:0 1px 2px rgba(0,0,0,0.06);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
                     <div>
-                        <strong>Landing Page Shortcode:</strong>
-                        <code style="font-size:14px;padding:4px 8px;background:#f0f0f1;margin-left:8px;user-select:all;">[tch_raffle_landing]</code>
-                        <span style="color:#646970;margin-left:8px;">Active Campaign ID: <code><?php echo esc_html( $s['campaign_slug'] ); ?></code></span>
+                        <strong>Shortcode:</strong>
+                        <code style="font-size:14px;padding:4px 8px;background:#f0f0f1;margin-left:6px;user-select:all;">[tch_raffle_landing]</code>
+                        <span style="color:#646970;margin-left:10px;">Campaign ID: <code><?php echo esc_html( $s['campaign_slug'] ); ?></code></span>
                     </div>
-                    <div>
-                        <a href="<?php echo esc_url( home_url( '/?tch_live_stage=1' ) ); ?>" target="_blank" class="button button-primary">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a href="<?php echo esc_url( home_url( '/?tch_team_entries=1' ) ); ?>" target="_blank" class="button button-secondary">
+                            📋 Open Frontend Team Entries Portal (PIN: <?php echo esc_html( $s['team_entries_pin'] ); ?>) ↗
+                        </a>
+                        <a href="<?php echo esc_url( home_url( '/?tch_live_stage=1&operator=1' ) ); ?>" target="_blank" class="button button-primary">
                             🎰 Open Live Stage (Operator / Spectator) ↗
                         </a>
                     </div>
@@ -248,15 +258,14 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
 
                     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(460px, 1fr));gap:20px;margin-top:20px;">
                         
-                        <!-- CARD 1: Event Schedule, Stage Engine & Team PIN -->
+                        <!-- CARD 1: Event Schedule, Stage Engine & Team PINs -->
                         <div style="background:#fff;padding:20px;border:1px solid #ccd0d4;border-radius:6px;">
-                            <h2 style="margin-top:0;border-bottom:1px solid #eee;padding-bottom:10px;">1. Event Schedule, Stage Engine & Team Access</h2>
+                            <h2 style="margin-top:0;border-bottom:1px solid #eee;padding-bottom:10px;">1. Event Schedule, Stage Engine & Team PINs</h2>
                             <table class="form-table" role="presentation">
                                 <tr>
                                     <th><label>Active Campaign Slug</label></th>
                                     <td>
                                         <input type="text" name="campaign_slug" value="<?php echo esc_attr( $s['campaign_slug'] ); ?>" class="regular-text" required>
-                                        <p class="description">Unique ID grouping entries for this event (e.g. <code>sa-day-els-2026</code>).</p>
                                     </td>
                                 </tr>
                                 <tr>
@@ -283,8 +292,14 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                                     </td>
                                 </tr>
                                 <tr>
+                                    <th><label>Live Stage Draw Date</label></th>
+                                    <td>
+                                        <input type="date" name="live_draw_date" value="<?php echo esc_attr( $s['live_draw_date'] ); ?>" required>
+                                    </td>
+                                </tr>
+                                <tr>
                                     <th><label>Live Stage Draw Time</label></th>
-                                    <td><input type="time" name="live_draw_time" value="<?php echo esc_attr( $s['live_draw_time'] ); ?>"></td>
+                                    <td><input type="time" name="live_draw_time" value="<?php echo esc_attr( $s['live_draw_time'] ); ?>" required></td>
                                 </tr>
                                 <tr>
                                     <th><label>Ticket ID Prefix</label></th>
@@ -300,14 +315,20 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
-                                        <p class="description">You can also switch engines live on the Stage screen.</p>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th><label>Team Operator PIN</label></th>
+                                    <th><label>Live Stage Operator PIN</label></th>
                                     <td>
                                         <input type="text" name="operator_pin" value="<?php echo esc_attr( $s['operator_pin'] ); ?>" style="width:120px;font-weight:700;letter-spacing:2px;" required>
-                                        <p class="description">Share this PIN with your booth staff so they can unlock Operator Controls on the Live Stage from any device.</p>
+                                        <p class="description">PIN for staff to unlock Spin & Winner Controls on <code>/?tch_live_stage=1</code></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th><label>Team Entries Portal PIN</label></th>
+                                    <td>
+                                        <input type="text" name="team_entries_pin" value="<?php echo esc_attr( $s['team_entries_pin'] ); ?>" style="width:120px;font-weight:700;letter-spacing:2px;" required>
+                                        <p class="description">PIN for staff to view, search & export entries on <code>/?tch_team_entries=1</code></p>
                                     </td>
                                 </tr>
                             </table>
@@ -393,7 +414,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                     </p>
                 </form>
 
-                <!-- CARD 5: Multi-Event Archiver (How to start a new event after Oct 31st) -->
+                <!-- CARD 5: Multi-Event Archiver -->
                 <div style="background:#fff8e5;padding:22px;border:1px solid #f0c33c;border-radius:8px;margin-top:20px;max-width:980px;">
                     <h2 style="margin-top:0;">📦 Done with the Current Event? Archive & Start a New Event Raffle</h2>
                     <p style="color:#3c434a;">
@@ -462,7 +483,6 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             $search          = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
             $campaign_filter = isset( $_GET['campaign_filter'] ) ? sanitize_text_field( wp_unslash( $_GET['campaign_filter'] ) ) : $s['campaign_slug'];
 
-            // Distinct campaigns in DB
             $db_campaigns = $wpdb->get_col( "SELECT DISTINCT campaign_slug FROM `$table_name` ORDER BY id DESC" );
             if ( ! is_array( $db_campaigns ) ) {
                 $db_campaigns = array();
@@ -508,6 +528,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
             <div class="wrap">
                 <h1 class="wp-heading-inline">Raffle Registrations & Event Archives (<?php echo count( $entries ); ?> Shown)</h1>
                 <a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action">📥 Export Current View to CSV</a>
+                <a href="<?php echo esc_url( home_url( '/?tch_team_entries=1' ) ); ?>" target="_blank" class="page-title-action">📋 Open Frontend Team Entries Portal ↗</a>
                 <hr class="wp-header-end">
 
                 <?php if ( isset( $_GET['deleted'] ) ) : ?>
@@ -574,7 +595,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
         }
 
         /**
-         * Render Live Stage Control Center & Operator Access Instructions
+         * Render Live Stage Control Center & Team Portal Links
          */
         public function render_stage_control_page() {
             global $wpdb;
@@ -597,7 +618,7 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
                     'spin_id'   => 0,
                     'candidate' => null,
                 ) );
-                echo '<div class="notice notice-success is-dismissible"><p><strong>All entries for ' . esc_html( $s['event_name'] ) . ' have been reset to Eligible (valid) status!</strong></p></div>';
+                echo '<div class="notice notice-success is-dismissible"><p><strong>All entries for ' . esc_html( $s['event_name'] ) . ' have been reset to Eligible (valid) status and Live Broadcast reopened!</strong></p></div>';
             }
 
             $valid_count  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'valid'", $c_slug ) );
@@ -606,50 +627,64 @@ if ( ! class_exists( 'TCH_Raffle_Admin' ) ) {
 
             $public_stage_url   = home_url( '/?tch_live_stage=1' );
             $operator_stage_url = home_url( '/?tch_live_stage=1&operator=1' );
+            $team_portal_url    = home_url( '/?tch_team_entries=1' );
             ?>
             <div class="wrap">
                 <h1 style="display:flex;align-items:center;gap:10px;">
                     <span class="dashicons dashicons-megaphone" style="font-size:28px;width:28px;height:28px;"></span>
-                    TCH Raffle — Multi-Engine Live Stage & Broadcast Control Center
+                    TCH Raffle — Live Stage & Team Portal Control Center
                 </h1>
 
-                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:20px;margin-top:20px;max-width:1120px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;margin-top:20px;max-width:1180px;">
                     
                     <!-- Card 1: Operator Launch Card -->
-                    <div style="background:#0f172a;color:#fff;padding:28px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
-                        <span style="background:rgba(250,204,21,0.2);color:#facc15;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;">TEAM OPERATOR MODE</span>
-                        <h2 style="color:#fff;font-size:22px;margin:12px 0 8px;">Launch Operator Stage</h2>
+                    <div style="background:#0f172a;color:#fff;padding:26px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+                        <span style="background:rgba(250,204,21,0.2);color:#facc15;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;">1. TEAM OPERATOR STAGE</span>
+                        <h2 style="color:#fff;font-size:21px;margin:12px 0 8px;">Launch Operator Stage</h2>
                         <p style="color:#94a3b8;line-height:1.5;margin-bottom:14px;">
                             Active Engine: <strong style="color:#facc15;"><?php echo esc_html( $engines[ $s['stage_engine'] ] ?? 'Slot Odometer' ); ?></strong><br>
-                            Team Operator PIN: <code style="background:#1e293b;color:#86efac;padding:2px 8px;border-radius:4px;font-weight:800;"><?php echo esc_html( $s['operator_pin'] ); ?></code>
+                            Operator PIN: <code style="background:#1e293b;color:#86efac;padding:2px 8px;border-radius:4px;font-weight:800;"><?php echo esc_html( $s['operator_pin'] ); ?></code>
                         </p>
                         <a href="<?php echo esc_url( $operator_stage_url ); ?>" target="_blank" class="button button-primary button-hero" style="background:#facc15;border-color:#eab308;color:#0f172a;font-weight:800;width:100%;text-align:center;margin-bottom:12px;">
                             🚀 Launch Operator Stage ↗
                         </a>
                         <p style="font-size:12px;color:#cbd5e1;margin:0;">
-                            💡 <strong>For Team Members:</strong> Share <code><?php echo esc_url( $public_stage_url ); ?></code> with your staff. They can tap <strong>"🔑 Operator Login"</strong> in the top corner and enter PIN <strong><?php echo esc_html( $s['operator_pin'] ); ?></strong> to run the draw!
+                            Waits in <strong>Ready Mode</strong> until the Operator clicks Spin. Once a winner is confirmed, the live broadcast automatically ends and locks into the Official Result screen.
                         </p>
                     </div>
 
-                    <!-- Card 2: Public Spectator Broadcast & Pool Status -->
-                    <div style="background:#fff;padding:28px;border:1px solid #ccd0d4;border-radius:12px;">
-                        <h2 style="margin-top:0;">Active Campaign Status (<code><?php echo esc_html( $c_slug ); ?></code>)</h2>
-                        <ul style="font-size:15px;line-height:2;margin:12px 0 20px;">
+                    <!-- Card 2: Frontend Team Entries Portal -->
+                    <div style="background:#1e293b;color:#fff;padding:26px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.12);">
+                        <span style="background:rgba(56,189,248,0.2);color:#38bdf8;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;">2. FRONTEND TEAM ENTRIES PORTAL</span>
+                        <h2 style="color:#fff;font-size:21px;margin:12px 0 8px;">Shareable Team Entries Page</h2>
+                        <p style="color:#94a3b8;line-height:1.5;margin-bottom:14px;">
+                            Share this URL with your team at the event so they can view all registrations, search by Name/Ticket/Phone, and export CSVs:<br>
+                            Team Portal PIN: <code style="background:#0f172a;color:#38bdf8;padding:2px 8px;border-radius:4px;font-weight:800;"><?php echo esc_html( $s['team_entries_pin'] ); ?></code>
+                        </p>
+                        <input type="text" readonly value="<?php echo esc_url( $team_portal_url ); ?>" style="width:100%;margin-bottom:10px;background:#0f172a;color:#fff;border:1px solid #334155;padding:8px;" onclick="this.select();">
+                        <a href="<?php echo esc_url( $team_portal_url ); ?>" target="_blank" class="button button-secondary" style="width:100%;text-align:center;font-weight:700;">
+                            📋 Open Team Entries Portal ↗
+                        </a>
+                    </div>
+
+                    <!-- Card 3: Pool Status & Reset -->
+                    <div style="background:#fff;padding:26px;border:1px solid #ccd0d4;border-radius:12px;">
+                        <h2 style="margin-top:0;">Active Pool Status (<code><?php echo esc_html( $c_slug ); ?></code>)</h2>
+                        <ul style="font-size:15px;line-height:2;margin:12px 0 18px;">
                             <li>🟢 <strong>Eligible Tickets in Pool:</strong> <?php echo esc_html( $valid_count ); ?></li>
                             <li>🏆 <strong>Confirmed Winners:</strong> <?php echo esc_html( $winner_count ); ?></li>
                             <li>❌ <strong>Disqualified Tickets:</strong> <?php echo esc_html( $dq_count ); ?></li>
                         </ul>
 
-                        <div style="background:#f0f6fc;border:1px solid #c5d9ed;padding:12px;border-radius:8px;margin-bottom:18px;">
-                            <strong>📡 Public Live Spectator Link:</strong><br>
-                            <input type="text" readonly value="<?php echo esc_url( $public_stage_url ); ?>" style="width:100%;margin-top:6px;background:#fff;" onclick="this.select();">
-                            <small style="color:#50575e;display:block;margin-top:4px;">Participants opening this URL see the live draw animate in real time on their phones without operator buttons.</small>
+                        <div style="background:#f0f6fc;border:1px solid #c5d9ed;padding:10px;border-radius:8px;margin-bottom:14px;">
+                            <strong>📡 Public Spectator Link:</strong>
+                            <input type="text" readonly value="<?php echo esc_url( $public_stage_url ); ?>" style="width:100%;margin-top:4px;background:#fff;" onclick="this.select();">
                         </div>
 
-                        <form method="post" onsubmit="return confirm('Reset all Winners and Disqualified entries for this event back to Eligible?');">
+                        <form method="post" onsubmit="return confirm('Reset all Winners and Disqualified entries for this event back to Eligible? This will also reopen the Registration/Broadcast screens.');">
                             <?php wp_nonce_field( 'tch_reset_draw_nonce' ); ?>
-                            <button type="submit" name="tch_reset_draw_statuses" class="button button-secondary">
-                                🔄 Reset Event Tickets to Eligible (Practice Reset)
+                            <button type="submit" name="tch_reset_draw_statuses" class="button button-secondary" style="width:100%;">
+                                🔄 Reset Winner & Reopen Draw (Practice Reset)
                             </button>
                         </form>
                     </div>
