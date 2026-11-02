@@ -1,5 +1,5 @@
 /**
- * TCH Event Raffle v2.1 — Countdown Timer, Auto-Lock, Winner Result Transition & Ticket Lookup
+ * TCH Event Raffle v2.3 — Countdown Timer, Dropdown & Open Text Question Validation, 3D Ticket Flip & Lookup
  */
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof tchRaffleData === 'undefined') return;
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 1000);
     }
 
-    // Background Poll: If Winner is Confirmed on Stage, Immediately Hide Form & Live Links and Show Winner Result
+    // Background Poll: If Winner is Confirmed on Stage, Hide Form & Live Links and Show Winner Result
     function checkIfWinnerConfirmed() {
         if (hasWinner) return;
 
@@ -83,13 +83,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (flipScene) flipScene.style.display = 'none';
                     if (countdownBox) countdownBox.style.display = 'none';
                     if (finalWinnerCard && fwWinnersList) {
-                        fwWinnersList.innerHTML = res.data.winners.map(w => `
-                            <div class="tch-fw-ticket-box">
-                                <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
-                                <div class="tch-fw-ref-code">${escapeHtml(w.ref_code)}</div>
-                                <div class="tch-fw-winner-name">🎉 ${escapeHtml(w.full_name)}</div>
-                            </div>
-                        `).join('');
+                        fwWinnersList.innerHTML = res.data.winners.map(w => {
+                            const ansParts = [w.quiz_answer, w.text_answer].filter(Boolean).join(' • ');
+                            return `
+                                <div class="tch-fw-ticket-box">
+                                    <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
+                                    <div class="tch-fw-ref-code">${escapeHtml(w.ref_code)}</div>
+                                    <div class="tch-fw-winner-name">🎉 ${escapeHtml(w.full_name)}</div>
+                                    ${ansParts ? `<div style="margin-top:8px;font-size:12px;color:#86efac;font-weight:700;">✅ Answer: ${escapeHtml(ansParts)}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('');
                         finalWinnerCard.style.display = 'block';
                     }
                 }
@@ -146,14 +150,26 @@ document.addEventListener('DOMContentLoaded', function () {
             e.preventDefault();
             feedbackBox.style.display = 'none';
 
-            const fullName = document.getElementById('tch_full_name').value.trim();
-            const email    = document.getElementById('tch_email').value.trim();
-            const phone    = document.getElementById('tch_phone').value.trim();
-            const igCheck  = document.getElementById('tch_ig_check').checked;
-            const ytCheck  = document.getElementById('tch_yt_check').checked;
+            const fullName   = document.getElementById('tch_full_name').value.trim();
+            const email      = document.getElementById('tch_email').value.trim();
+            const phone      = document.getElementById('tch_phone').value.trim();
+            const quizSelect = document.getElementById('tch_quiz_answer');
+            const textInput  = document.getElementById('tch_text_answer');
+            const igCheck    = document.getElementById('tch_ig_check').checked;
+            const ytCheck    = document.getElementById('tch_yt_check').checked;
 
             if (!fullName || !email || !phone) {
                 showError('Please fill in your Full Name, Email, and Mobile/WhatsApp number.');
+                return;
+            }
+
+            if (quizSelect && !quizSelect.value.trim()) {
+                showError('Please select an answer from the dropdown question.');
+                return;
+            }
+
+            if (textInput && !textInput.value.trim()) {
+                showError('Please type your answer in the question box.');
                 return;
             }
 
@@ -179,6 +195,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (response.success) {
                     document.getElementById('tch-ticket-ref').textContent  = response.data.ref_code;
                     document.getElementById('tch-ticket-name').textContent = response.data.full_name;
+                    const ansEl = document.getElementById('tch-ticket-answer');
+                    if (ansEl) {
+                        ansEl.textContent = response.data.answer_summary || response.data.quiz_answer || response.data.text_answer || 'Confirmed';
+                    }
                     flipCard.classList.add('is-flipped');
                     window.scrollTo({ top: flipCard.offsetTop - 20, behavior: 'smooth' });
                 } else {

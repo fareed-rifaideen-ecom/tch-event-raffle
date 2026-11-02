@@ -63,16 +63,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
          */
         public function render_landing_shortcode() {
             global $wpdb;
-            $s          = tch_raffle_get_settings();
-            $times      = $this->get_schedule_timestamps( $s );
-            $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
-            $c_slug     = $s['campaign_slug'];
-            $stage_url  = home_url( '/?tch_live_stage=1' );
+            $s              = tch_raffle_get_settings();
+            $times          = $this->get_schedule_timestamps( $s );
+            $table_name     = $wpdb->prefix . TCH_RAFFLE_TABLE;
+            $c_slug         = $s['campaign_slug'];
+            $stage_url      = home_url( '/?tch_live_stage=1' );
+            $quiz_enabled   = ! empty( $s['quiz_enabled'] );
+            $quiz_options   = tch_raffle_get_quiz_options_array( $s );
+            $text_q_enabled = ! empty( $s['text_q_enabled'] );
 
             // Check if Official Winner is Confirmed for this Active Event
             $winners = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner' ORDER BY id DESC",
                     $c_slug
                 )
             );
@@ -88,17 +91,19 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             wp_enqueue_script( 'tch-raffle-frontend' );
 
             wp_localize_script( 'tch-raffle-frontend', 'tchRaffleData', array(
-                'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
-                'stageNonce'=> wp_create_nonce( 'tch_stage_nonce' ),
-                'nonce'     => wp_create_nonce( 'tch_raffle_submit_nonce' ),
-                'nowTs'     => $times['now'],
-                'openTs'    => $times['open'],
-                'closeTs'   => $times['close'],
-                'hasWinner' => $has_winner,
-                'stageUrl'  => $stage_url,
-                'eventName' => $s['event_name'],
-                'eventDate' => $formatted_date,
-                'drawLabel' => $draw_full_label,
+                'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+                'stageNonce'   => wp_create_nonce( 'tch_stage_nonce' ),
+                'nonce'        => wp_create_nonce( 'tch_raffle_submit_nonce' ),
+                'nowTs'        => $times['now'],
+                'openTs'       => $times['open'],
+                'closeTs'      => $times['close'],
+                'hasWinner'    => $has_winner,
+                'quizEnabled'  => $quiz_enabled,
+                'textQEnabled' => $text_q_enabled,
+                'stageUrl'     => $stage_url,
+                'eventName'    => $s['event_name'],
+                'eventDate'    => $formatted_date,
+                'drawLabel'    => $draw_full_label,
             ) );
 
             ob_start();
@@ -106,7 +111,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             <div class="tch-raffle-wrapper" id="tch-raffle-app">
                 <div class="tch-raffle-container">
 
-                    <!-- LEFT COLUMN: Brand Showcase, Prize Bike & Countdown (Countdown hidden once Winner is picked) -->
+                    <!-- LEFT COLUMN: Brand Showcase, Prize Bike & Countdown -->
                     <div class="tch-showcase-col">
                         <div class="tch-event-badges">
                             <span class="tch-badge tch-badge-live">
@@ -139,7 +144,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                         </div>
 
                         <?php if ( ! $has_winner ) : ?>
-                            <!-- Countdown Timer Bar (Hidden automatically when Winner is confirmed) -->
+                            <!-- Countdown Timer Bar -->
                             <div class="tch-countdown-card" id="tch-countdown-box">
                                 <div class="tch-countdown-header">
                                     <span id="tch-timer-status-label">⏳ REGISTRATION CLOSES IN:</span>
@@ -162,7 +167,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                     <div class="tch-interaction-col">
 
                         <!-- =========================================================
-                             STATE A: OFFICIAL WINNER RESULT CARD (No Form, No Live Links)
+                             STATE A: OFFICIAL WINNER RESULT CARD
                              ========================================================= -->
                         <div id="tch-final-winner-card" class="tch-final-winner-card" style="display:<?php echo $has_winner ? 'block' : 'none'; ?>;">
                             <div class="tch-fw-badge">🏁 RAFFLE DRAW COMPLETED</div>
@@ -172,11 +177,18 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
                             <div id="tch-fw-winners-list">
                                 <?php if ( $has_winner ) : ?>
-                                    <?php foreach ( $winners as $w ) : ?>
+                                    <?php foreach ( $winners as $w ) : 
+                                        $combined_ans = array_filter( array( $w->quiz_answer ?? '', $w->text_answer ?? '' ) );
+                                    ?>
                                         <div class="tch-fw-ticket-box">
                                             <span class="tch-fw-ref-label">WINNING TICKET REFERENCE</span>
                                             <div class="tch-fw-ref-code"><?php echo esc_html( $w->ref_code ); ?></div>
                                             <div class="tch-fw-winner-name">🎉 <?php echo esc_html( $w->full_name ); ?></div>
+                                            <?php if ( ! empty( $combined_ans ) ) : ?>
+                                                <div style="margin-top:8px;font-size:12px;color:#86efac;font-weight:700;">
+                                                    ✅ Answer: <?php echo esc_html( implode( ' • ', $combined_ans ) ); ?>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -195,7 +207,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                     <!-- CARD FRONT: Registration Form -->
                                     <div class="tch-card-face tch-card-front">
                                         
-                                        <!-- Closed State Overlay (Shown when timer hits 00:00:00 before winner is picked) -->
+                                        <!-- Closed State Overlay -->
                                         <div class="tch-closed-overlay" id="tch-closed-overlay" style="display:none;">
                                             <div class="tch-closed-icon">🎰</div>
                                             <h3 id="tch-closed-title">Registration is Now Closed!</h3>
@@ -209,7 +221,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
                                         <div class="tch-form-header">
                                             <h2>Claim Your Raffle Ticket</h2>
-                                            <p>Enter your details & complete both steps below</p>
+                                            <p>Enter your details, answer the challenge & complete both steps</p>
                                         </div>
 
                                         <form id="tch-raffle-form" novalidate>
@@ -233,6 +245,38 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                                     <input type="tel" id="tch_phone" name="phone" placeholder="+971 50 123 4567" required autocomplete="tel">
                                                 </div>
                                             </div>
+
+                                            <?php if ( ( $quiz_enabled && ! empty( $quiz_options ) ) || $text_q_enabled ) : ?>
+                                                <!-- SKILL CHALLENGE CARD (Dropdown & Open Text Input) -->
+                                                <div class="tch-quiz-card">
+                                                    <div class="tch-quiz-badge">🚲 SKILL CHALLENGE — QUALIFY FOR THE DRAW</div>
+
+                                                    <?php if ( $quiz_enabled && ! empty( $quiz_options ) ) : ?>
+                                                        <div class="tch-quiz-item">
+                                                            <label for="tch_quiz_answer" class="tch-quiz-label">
+                                                                <?php echo esc_html( $s['quiz_question'] ); ?> <span>*</span>
+                                                            </label>
+                                                            <div class="tch-select-wrap">
+                                                                <select id="tch_quiz_answer" name="quiz_answer" required>
+                                                                    <option value="">— Select Your Answer —</option>
+                                                                    <?php foreach ( $quiz_options as $opt ) : ?>
+                                                                        <option value="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $opt ); ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    <?php endif; ?>
+
+                                                    <?php if ( $text_q_enabled ) : ?>
+                                                        <div class="tch-quiz-item" style="<?php echo ( $quiz_enabled && ! empty( $quiz_options ) ) ? 'margin-top:12px;' : ''; ?>">
+                                                            <label for="tch_text_answer" class="tch-quiz-label">
+                                                                <?php echo esc_html( $s['text_q_question'] ); ?> <span>*</span>
+                                                            </label>
+                                                            <input type="text" id="tch_text_answer" name="text_answer" class="tch-text-q-input" placeholder="<?php echo esc_attr( $s['text_q_placeholder'] ); ?>" required>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
 
                                             <!-- Interactive Social Checkboxes -->
                                             <div class="tch-social-steps">
@@ -297,13 +341,13 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                                                         <strong id="tch-ticket-name">-</strong>
                                                     </div>
                                                     <div>
-                                                        <small>LIVE DRAW SCHEDULE</small>
-                                                        <strong><?php echo esc_html( $draw_full_label ); ?></strong>
+                                                        <small>SUBMITTED ANSWER</small>
+                                                        <strong id="tch-ticket-answer" style="color:#facc15;">-</strong>
                                                     </div>
                                                 </div>
 
                                                 <a href="<?php echo esc_url( $stage_url ); ?>" id="tch-ticket-live-link" class="tch-live-stage-link-btn">
-                                                    📡 Open Live Draw Broadcast Screen ↗
+                                                    📡 Live Draw Broadcast (<?php echo esc_html( $draw_full_label ); ?>) ↗
                                                 </a>
                                             </div>
 
@@ -369,7 +413,6 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             $table_name = $wpdb->prefix . TCH_RAFFLE_TABLE;
             $times      = $this->get_schedule_timestamps( $s );
 
-            // Reject if Winner is already selected or time expired
             $winner_exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) );
             if ( $winner_exists > 0 || $times['now'] > $times['close'] ) {
                 wp_send_json_error( array( 'message' => 'Sorry, registration for this raffle draw has officially closed!' ) );
@@ -379,11 +422,21 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             $email        = sanitize_email( wp_unslash( $_POST['email'] ?? '' ) );
             $raw_phone    = sanitize_text_field( wp_unslash( $_POST['phone'] ?? '' ) );
             $phone        = preg_replace( '/[^0-9\+]/', '', $raw_phone );
+            $quiz_answer  = sanitize_text_field( wp_unslash( $_POST['quiz_answer'] ?? '' ) );
+            $text_answer  = sanitize_text_field( wp_unslash( $_POST['text_answer'] ?? '' ) );
             $ig_confirmed = ! empty( $_POST['ig_confirmed'] ) ? 1 : 0;
             $yt_confirmed = ! empty( $_POST['yt_confirmed'] ) ? 1 : 0;
 
             if ( empty( $full_name ) || ! is_email( $email ) || strlen( $phone ) < 7 ) {
                 wp_send_json_error( array( 'message' => 'Please enter your full name, a valid email, and a valid WhatsApp/Mobile number.' ) );
+            }
+
+            if ( ! empty( $s['quiz_enabled'] ) && empty( $quiz_answer ) ) {
+                wp_send_json_error( array( 'message' => 'Please select an answer for "' . $s['quiz_question'] . '".' ) );
+            }
+
+            if ( ! empty( $s['text_q_enabled'] ) && '' === trim( $text_answer ) ) {
+                wp_send_json_error( array( 'message' => 'Please enter your answer for "' . $s['text_q_question'] . '".' ) );
             }
 
             if ( ! $ig_confirmed || ! $yt_confirmed ) {
@@ -392,7 +445,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
             $existing = $wpdb->get_row(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name FROM `$table_name` WHERE campaign_slug = %s AND (email = %s OR phone = %s) LIMIT 1",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer FROM `$table_name` WHERE campaign_slug = %s AND (email = %s OR phone = %s) LIMIT 1",
                     $c_slug,
                     $email,
                     $phone
@@ -400,11 +453,15 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             );
 
             if ( $existing ) {
+                $combined_existing = implode( ' • ', array_filter( array( $existing->quiz_answer ?: $quiz_answer, $existing->text_answer ?: $text_answer ) ) );
                 wp_send_json_success( array(
-                    'ref_code'  => $existing->ref_code,
-                    'full_name' => $existing->full_name,
-                    'existing'  => true,
-                    'message'   => 'You are already registered for this event! Here is your Raffle Ticket.',
+                    'ref_code'       => $existing->ref_code,
+                    'full_name'      => $existing->full_name,
+                    'quiz_answer'    => $existing->quiz_answer ?: $quiz_answer,
+                    'text_answer'    => $existing->text_answer ?: $text_answer,
+                    'answer_summary' => $combined_existing ?: 'Confirmed',
+                    'existing'       => true,
+                    'message'        => 'You are already registered for this event! Here is your Raffle Ticket.',
                 ) );
             }
 
@@ -419,25 +476,33 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                     'full_name'     => $full_name,
                     'email'         => $email,
                     'phone'         => $phone,
+                    'quiz_answer'   => $quiz_answer,
+                    'text_answer'   => $text_answer,
+                    'manual_status' => 'auto',
                     'ig_confirmed'  => 1,
                     'yt_confirmed'  => 1,
                     'status'        => 'valid',
                     'ip_address'    => sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' ),
                     'created_at'    => current_time( 'mysql' ),
                 ),
-                array( '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
+                array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
             );
 
             if ( ! $inserted ) {
                 wp_send_json_error( array( 'message' => 'Could not save your registration. Please try again.' ) );
             }
 
-            $this->send_ticket_email( $full_name, $email, $ref_code, $s );
+            $this->send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $text_answer, $s );
+
+            $combined_ans = implode( ' • ', array_filter( array( $quiz_answer, $text_answer ) ) );
 
             wp_send_json_success( array(
-                'ref_code'  => $ref_code,
-                'full_name' => $full_name,
-                'existing'  => false,
+                'ref_code'       => $ref_code,
+                'full_name'      => $full_name,
+                'quiz_answer'    => $quiz_answer,
+                'text_answer'    => $text_answer,
+                'answer_summary' => $combined_ans ?: 'Confirmed',
+                'existing'       => false,
             ) );
         }
 
@@ -459,7 +524,7 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
 
             $row = $wpdb->get_row(
                 $wpdb->prepare(
-                    "SELECT ref_code, full_name, status FROM `$table_name` WHERE campaign_slug = %s AND (ref_code = %s OR email = %s) LIMIT 1",
+                    "SELECT ref_code, full_name, quiz_answer, text_answer, manual_status, status FROM `$table_name` WHERE campaign_slug = %s AND (ref_code = %s OR email = %s) LIMIT 1",
                     $c_slug,
                     strtoupper( $query ),
                     $query
@@ -470,11 +535,21 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
                 wp_send_json_error( array( 'message' => 'No ticket found matching "' . esc_html( $query ) . '" for ' . esc_html( $s['event_name'] ) . '.' ) );
             }
 
-            $status_label = '🟢 Verified & Eligible in Draw Pool';
+            $has_winner   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `$table_name` WHERE campaign_slug = %s AND status = 'winner'", $c_slug ) ) > 0;
+            $combined_ans = implode( ' • ', array_filter( array( $row->quiz_answer ?? '', $row->text_answer ?? '' ) ) );
+            $ans_text     = ! empty( $combined_ans ) ? ' (Answer: ' . $combined_ans . ')' : '';
+
             if ( 'winner' === $row->status ) {
-                $status_label = '🏆 CONGRATULATIONS! OFFICIAL WINNER!';
-            } elseif ( 'disqualified' === $row->status ) {
-                $status_label = '❌ Disqualified during social verification';
+                $status_label = '🏆 CONGRATULATIONS! OFFICIAL WINNER!' . $ans_text;
+            } elseif ( 'disqualified' === $row->status || 'disqualified' === ( $row->manual_status ?? 'auto' ) ) {
+                $status_label = '❌ Not Qualified / Disqualified' . $ans_text;
+            } elseif ( $has_winner ) {
+                $is_qual      = tch_raffle_is_entry_qualified( $row, $s );
+                $status_label = $is_qual
+                    ? '✅ Qualified in Final Draw Pool' . $ans_text
+                    : '❌ Did Not Qualify for Final Draw' . $ans_text;
+            } else {
+                $status_label = '🎟️ Registered' . $ans_text;
             }
 
             wp_send_json_success( array(
@@ -508,9 +583,9 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
         }
 
         /**
-         * Dispatch HTML Email Scoped to marketing@thecyclehub.com
+         * Dispatch Bulletproof HTML Email (Outlook, Gmail & Apple Mail Optimized)
          */
-        private function send_ticket_email( $full_name, $email, $ref_code, $s ) {
+        private function send_ticket_email( $full_name, $email, $ref_code, $quiz_answer, $text_answer, $s ) {
             $sender_email = ! empty( $s['sender_email'] ) ? $s['sender_email'] : 'marketing@thecyclehub.com';
             $sender_name  = ! empty( $s['sender_name'] ) ? $s['sender_name'] : 'The Cycle Hub';
 
@@ -522,57 +597,126 @@ if ( ! class_exists( 'TCH_Raffle_Public' ) ) {
             add_filter( 'wp_mail_from_name', $from_name_cb, 999 );
             add_filter( 'wp_mail_content_type', $html_type_cb, 999 );
 
-            $subject             = '🎟️ Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
+            // Prevent WordPress from converting text characters into giant 72x72 images in Outlook
+            remove_filter( 'wp_mail', 'wp_staticize_emoji_for_email' );
+
+            $subject             = 'Your Raffle Ticket (' . $ref_code . ') - ' . $s['event_name'];
             $formatted_date      = date_i18n( 'jS F Y', strtotime( $s['event_date'] ) );
             $draw_date_raw       = ! empty( $s['live_draw_date'] ) ? $s['live_draw_date'] : $s['event_date'];
             $formatted_draw_date = date_i18n( 'jS M Y', strtotime( $draw_date_raw ) );
             $formatted_draw_time = date_i18n( 'g:i A', strtotime( $s['live_draw_time'] ) );
             $stage_url           = home_url( '/?tch_live_stage=1' );
 
-            $body = '
-            <div style="background-color:#0f172a;padding:35px 15px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
-                <div style="max-width:520px;margin:0 auto;background:#1e293b;border-radius:16px;overflow:hidden;border:1px solid #334155;">
-                    <div style="background:linear-gradient(135deg,#eab308 0%,#ca8a04 100%);padding:20px;text-align:center;color:#0f172a;">
-                        <div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">Official Raffle Draw Ticket</div>
-                        <h2 style="margin:6px 0 0;font-size:22px;font-weight:900;">' . esc_html( $s['event_name'] ) . '</h2>
-                    </div>
-                    <div style="padding:30px 25px;text-align:center;">
-                        <p style="margin:0 0 15px;font-size:16px;color:#cbd5e1;">Hi <strong>' . esc_html( $full_name ) . '</strong>, your entry is confirmed!</p>
-                        <div style="background:#0f172a;border:2px dashed #eab308;border-radius:12px;padding:20px;margin:20px 0;">
-                            <div style="font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Your Reference Number</div>
-                            <div style="font-size:34px;font-weight:900;color:#eab308;letter-spacing:3px;font-family:monospace;">' . esc_html( $ref_code ) . '</div>
-                        </div>
-                        <table style="width:100%;margin-top:20px;border-top:1px solid #334155;padding-top:15px;font-size:14px;color:#cbd5e1;text-align:left;">
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">📍 Location:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $s['event_place'] ) . '</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">📅 Event Date:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;">' . esc_html( $formatted_date ) . '</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:6px 0;color:#94a3b8;">⏰ Live Draw Schedule:</td>
-                                <td style="padding:6px 0;text-align:right;font-weight:600;color:#eab308;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
-                            </tr>
-                        </table>
-                        <div style="margin-top:22px;">
-                            <a href="' . esc_url( $stage_url ) . '" style="display:inline-block;background:#eab308;color:#0f172a;font-weight:800;padding:12px 22px;border-radius:10px;text-decoration:none;font-size:14px;">
-                                📡 Watch Live Raffle Draw Online ↗
-                            </a>
-                        </div>
-                        <p style="font-size:13px;color:#94a3b8;margin-top:22px;line-height:1.5;">
-                            Make sure you have followed <a href="' . esc_url( $s['ig_url'] ) . '" style="color:#eab308;">@thecyclehub on Instagram</a> (with your bike selfie tagged) and subscribed to our <a href="' . esc_url( $s['yt_url'] ) . '" style="color:#eab308;">YouTube Channel</a> so your ticket passes verification during the live draw!
-                        </p>
-                    </div>
-                    <div style="background:#0f172a;padding:14px;text-align:center;font-size:12px;color:#64748b;">
-                        &copy; ' . gmdate( 'Y' ) . ' The Cycle Hub Dubai • <a href="https://thecyclehub.com" style="color:#94a3b8;text-decoration:none;">thecyclehub.com</a>
-                    </div>
-                </div>
-            </div>';
+            $extra_rows_html = '';
+            if ( ! empty( $quiz_answer ) ) {
+                $extra_rows_html .= '
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">' . esc_html( $s['quiz_question'] ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#facc15;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $quiz_answer ) . '</td>
+                </tr>';
+            }
+            if ( ! empty( $text_answer ) ) {
+                $extra_rows_html .= '
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">' . esc_html( $s['text_q_question'] ) . '</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #334155;color:#38bdf8;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $text_answer ) . '</td>
+                </tr>';
+            }
 
-            wp_mail( $email, $subject, $body );
+            $headers = array(
+                'Reply-To: ' . $sender_name . ' <' . $sender_email . '>',
+            );
 
+            $body = '<!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>' . esc_html( $subject ) . '</title>
+            </head>
+            <body style="margin:0;padding:0;background-color:#0b0f19;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b0f19" style="background-color:#0b0f19;padding:30px 12px;">
+                    <tr>
+                        <td align="center">
+                            <!-- Fixed 540px Card Table for Outlook Desktop & Mobile -->
+                            <table role="presentation" width="540" cellspacing="0" cellpadding="0" border="0" bgcolor="#1e293b" style="max-width:540px;width:100%;background-color:#1e293b;border:1px solid #334155;border-radius:14px;overflow:hidden;">
+                                
+                                <!-- Solid Gold Header -->
+                                <tr>
+                                    <td bgcolor="#eab308" align="center" style="background-color:#eab308;padding:22px 20px;text-align:center;">
+                                        <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#0f172a;">OFFICIAL RAFFLE DRAW TICKET</div>
+                                        <h1 style="margin:6px 0 0;font-size:22px;font-weight:900;color:#0f172a;line-height:1.2;">' . esc_html( $s['event_name'] ) . '</h1>
+                                    </td>
+                                </tr>
+
+                                <!-- Main Body -->
+                                <tr>
+                                    <td bgcolor="#1e293b" style="background-color:#1e293b;padding:28px 26px;text-align:center;">
+                                        <p style="margin:0 0 18px;font-size:16px;color:#f8fafc;">
+                                            Hi <strong style="color:#ffffff;">' . esc_html( $full_name ) . '</strong>, your raffle entry is confirmed!
+                                        </p>
+
+                                        <!-- Reference Code Box -->
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0f172a" style="background-color:#0f172a;border:2px dashed #eab308;border-radius:10px;margin:0 0 22px;">
+                                            <tr>
+                                                <td align="center" style="padding:20px 15px;text-align:center;">
+                                                    <div style="font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">YOUR REFERENCE NUMBER</div>
+                                                    <div style="font-size:32px;font-weight:900;color:#facc15;letter-spacing:3px;font-family:Consolas,Monaco,monospace;">' . esc_html( $ref_code ) . '</div>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- Event Details Table -->
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #334155;margin-bottom:24px;">
+                                            <tr>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">Location</td>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#f8fafc;font-size:14px;font-weight:600;text-align:right;">' . esc_html( $s['event_place'] ) . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#94a3b8;font-size:14px;text-align:left;">Event Date</td>
+                                                <td style="padding:10px 0;border-bottom:1px solid #334155;color:#f8fafc;font-size:14px;font-weight:600;text-align:right;">' . esc_html( $formatted_date ) . '</td>
+                                            </tr>
+                                            ' . $extra_rows_html . '
+                                            <tr>
+                                                <td style="padding:10px 0;color:#94a3b8;font-size:14px;text-align:left;">Live Draw Schedule</td>
+                                                <td style="padding:10px 0;color:#facc15;font-size:14px;font-weight:700;text-align:right;">' . esc_html( $formatted_draw_date . ' @ ' . $formatted_draw_time ) . '</td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- Bulletproof CTA Button Table -->
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 22px;">
+                                            <tr>
+                                                <td align="center" bgcolor="#eab308" style="background-color:#eab308;border-radius:8px;">
+                                                    <a href="' . esc_url( $stage_url ) . '" target="_blank" style="display:inline-block;padding:13px 26px;font-size:14px;font-weight:800;color:#0f172a;text-decoration:none;text-transform:uppercase;letter-spacing:0.5px;">
+                                                        Watch Live Raffle Draw Online &rarr;
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <p style="font-size:13px;color:#94a3b8;margin:0;line-height:1.6;">
+                                            Make sure you have followed <a href="' . esc_url( $s['ig_url'] ) . '" style="color:#facc15;text-decoration:underline;">@thecyclehub on Instagram</a> (with your bike selfie tagged) and subscribed to our <a href="' . esc_url( $s['yt_url'] ) . '" style="color:#facc15;text-decoration:underline;">YouTube Channel</a> so your ticket passes verification during the live draw!
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <!-- Footer -->
+                                <tr>
+                                    <td bgcolor="#0f172a" align="center" style="background-color:#0f172a;padding:15px 20px;text-align:center;font-size:12px;color:#64748b;border-top:1px solid #334155;">
+                                        &copy; ' . gmdate( 'Y' ) . ' The Cycle Hub Dubai &bull; <a href="https://thecyclehub.com" style="color:#94a3b8;text-decoration:none;">thecyclehub.com</a>
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>';
+
+            wp_mail( $email, $subject, $body, $headers );
+
+            add_filter( 'wp_mail', 'wp_staticize_emoji_for_email' );
             remove_filter( 'wp_mail_from', $from_email_cb, 999 );
             remove_filter( 'wp_mail_from_name', $from_name_cb, 999 );
             remove_filter( 'wp_mail_content_type', $html_type_cb, 999 );
